@@ -1,0 +1,30 @@
+name: 예약 메일 폴링
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  poll-5min:
+    if: github.event.schedule == '*/5 * * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 네이버 메일 폴링
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://reservation-dashboard-pi.vercel.app/api/cron/poll-naver"
+      - name: 지메일(스테이폴리오·아임웹) 메일 폴링
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://reservation-dashboard-pi.vercel.app/api/cron/poll-gmail"
+
+  poll-30min:
+    if: github.event.schedule == '*/30 * * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 스테이폴리오 예약 재확인
+        run: |
+          curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://reservation-dashboard-pi.vercel.app/api/cron/reconcile-stayfolio"
