@@ -104,7 +104,7 @@ export function ManualReservationForm({
     return (
       <section id={id}>
         <button type="button" className="manual-entry-toggle" onClick={() => setOpen(true)}>
-          📝 예전 예약 수동 입력
+          📝 예약 수동 입력
         </button>
       </section>
     );
