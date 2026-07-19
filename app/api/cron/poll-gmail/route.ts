@@ -3,6 +3,7 @@ import {
   pollGmailStayfolioInbox,
   pollGmailImwebInbox,
 } from '../../../../lib/mail/poll-gmail';
+import { recordHeartbeat } from '../../../../lib/ingest';
 
 // Vercel Cron(또는 수동 호출)으로 주기 실행. CRON_SECRET 공유키로 보호.
 // 스테이폴리오·아임웹 알림 메일이 같은 지메일로 들어오므로 한 크론에서 순서대로 둘 다 처리한다.
@@ -28,6 +29,10 @@ export async function GET(request: Request) {
     errors.push(`imweb: ${message}`);
     return null;
   });
+
+  // 성공한 쪽만 하트비트 — 실패한 채널의 칩은 오래된 채로 남아 경고가 뜨게 둔다.
+  if (stayfolio !== null) await recordHeartbeat('stayfolio_email');
+  if (imweb !== null) await recordHeartbeat('imweb_email');
 
   return NextResponse.json({
     ok: errors.length === 0,

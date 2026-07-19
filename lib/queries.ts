@@ -84,22 +84,35 @@ const SOURCE_TO_CHANNEL: Record<string, Channel> = {
   imweb_email: 'imweb',
 };
 
-// 헤더의 "마지막 동기화" 표시용 — 채널별 가장 최근 ingest_log.received_at.
+// 헤더의 "마지막 동기화" 표시용 — 채널별로 max(마지막 확인 하트비트, 마지막 메일 처리 시각).
+// 하트비트(sync_heartbeat)는 새 메일이 없어도 폴링 성공 시마다 갱신되므로 평상시 칩은 이걸
+// 따라가고, ingest_log는 하트비트 도입 전 기록·웹훅 등 폴링 외 유입의 폴백.
 // 실패모드2(무음 유실) 대응: 이게 오래되면 UI에서 경고를 띄운다(app/globals.css .sync-chip.stale).
 export async function getLastSyncByChannel(
   supabase: SupabaseClient,
 ): Promise<Partial<Record<Channel, string>>> {
-  const { data, error } = await supabase
-    .from('ingest_log')
-    .select('source, received_at')
-    .order('received_at', { ascending: false })
-    .limit(200);
-  if (error) throw error;
+  const [ingest, heartbeat] = await Promise.all([
+    supabase
+      .from('ingest_log')
+      .select('source, received_at')
+      .order('received_at', { ascending: false })
+      .limit(200),
+    supabase.from('sync_heartbeat').select('source, checked_at'),
+  ]);
+  if (ingest.error) throw ingest.error;
+  if (heartbeat.error) throw heartbeat.error;
 
   const result: Partial<Record<Channel, string>> = {};
-  for (const row of data ?? []) {
+  for (const row of ingest.data ?? []) {
     const channel = SOURCE_TO_CHANNEL[row.source as string];
     if (channel && !result[channel]) result[channel] = row.received_at as string;
+  }
+  for (const row of heartbeat.data ?? []) {
+    const channel = SOURCE_TO_CHANNEL[row.source as string];
+    if (!channel) continue;
+    const checked = row.checked_at as string;
+    const existing = result[channel];
+    if (!existing || checked > existing) result[channel] = checked;
   }
   return result;
 }

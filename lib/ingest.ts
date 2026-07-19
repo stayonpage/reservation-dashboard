@@ -79,3 +79,19 @@ export async function handleIncoming(args: {
   await markLog({ status: 'parsed', parsed_reservation_id: data });
   return { status: 'parsed', reservationId: data as string };
 }
+
+// 폴링이 성공할 때마다(새 메일 유무와 무관하게) 확인 시각을 남긴다 — 헤더의 "마지막 동기화"
+// 칩용. 하트비트 실패가 폴링 자체를 실패로 만들면 안 되므로 어떤 에러도 삼킨다(best-effort).
+export async function recordHeartbeat(source: IngestSource): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('sync_heartbeat')
+      .upsert(
+        { source, checked_at: new Date().toISOString() },
+        { onConflict: 'source' },
+      );
+    if (error) console.error('[heartbeat]', source, error.message);
+  } catch (e) {
+    console.error('[heartbeat]', source, e instanceof Error ? e.message : String(e));
+  }
+}
