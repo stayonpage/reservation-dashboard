@@ -56,7 +56,11 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // /api/* 제외: 크론(CRON_SECRET)·웹훅(자체 서명 검증) 라우트는 세션 쿠키가 아니라
   // 각자의 방식으로 인증한다 — 여기서 걸리면 curl/외부 서비스가 전부 /login으로 튕긴다.
+  // /_next/data 제외: 이 프로젝트는 App Router만 쓰고 pages 라우터 데이터 라우트가 없는데,
+  // 일부 브라우저(웨일 등)의 프리페치 기능이 이전 배포의 build id로 이 경로를 계속 요청해서
+  // 미들웨어가 매번 붙잡고 처리하다 서버 함수가 죽는 문제(OOM)가 실사례로 확인됨 — 애초에
+  // 이 경로엔 인증 게이트가 필요 없으므로 완전히 우회시킨다.
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icon-.*\\.png|api/).*)',
+    '/((?!_next/static|_next/data|_next/image|favicon.ico|manifest.webmanifest|icon-.*\\.png|api/).*)',
   ],
 };
