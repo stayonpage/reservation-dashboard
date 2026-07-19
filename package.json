@@ -6,8 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "TZ=UTC vitest run",
+    "test:watch": "TZ=UTC vitest"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

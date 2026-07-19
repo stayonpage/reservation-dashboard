@@ -68,10 +68,13 @@ function listDates(range: DateRange): string[] {
   return dates;
 }
 
+// UTC 파싱+UTC 게터로 시간대 무관하게 계산. 이전엔 KST(+09:00) 파싱 + 로컬 게터를 섞어 써서,
+// UTC 서버(Vercel)에서는 "하루 더해도 같은 날"이 나왔고 위 listDates의 while 루프가
+// 무한루프가 되어 프로덕션 OOM 전면 장애(2026-07-19)를 일으켰다.
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00+09:00');
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 function isOccupied(checkIn: string, checkOut: string, date: string): boolean {

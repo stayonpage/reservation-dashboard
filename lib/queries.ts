@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Reservation, BlockTask } from './db-types';
 import type { Channel } from './types';
+import { kstTodayISO } from './format';
 
 // 서버 컴포넌트 초기 로드용 조회. DB 컬럼명이 Reservation/BlockTask 타입과 이미 1:1이라
 // 캐스팅 위주로 단순하게 유지(실시간 갱신은 컴포넌트의 postgres_changes 구독이 담당).
@@ -10,7 +11,8 @@ export async function getReservations(
 ): Promise<Reservation[]> {
   // 대시보드는 지원의 "오늘의 업무" 화면 — 체크아웃이 지난 과거 예약은 제외한다.
   // (메일 백로그를 통째로 수집하므로 과거 이력이 수백 건 쌓일 수 있음. 이력 조회 화면은 추후.)
-  const today = new Date().toISOString().slice(0, 10);
+  // "오늘"은 한국시간 기준 — UTC 서버에서 자정~오전9시(KST) 사이에 어제로 밀리지 않게.
+  const today = kstTodayISO();
   const { data, error } = await supabase
     .from('reservations')
     .select('*')

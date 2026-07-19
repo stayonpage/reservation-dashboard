@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import type { Reservation, BlockTask } from '../lib/db-types';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import { ROOMS, roomCodeOf } from '../lib/rooms';
-import { formatOptions, stayNightLabel } from '../lib/format';
+import { formatOptions, kstNow, stayNightLabel } from '../lib/format';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -12,10 +12,11 @@ function toISODate(y: number, m: number, d: number): string {
   return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+// UTC 파싱+UTC 게터 — KST 파싱+로컬 게터를 섞으면 UTC 서버에서 날짜가 밀린다(lib/format.ts 참고).
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00+09:00');
-  d.setDate(d.getDate() + days);
-  return toISODate(d.getFullYear(), d.getMonth(), d.getDate());
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 // 체크아웃 당일은 비운 것으로 취급(그날 새 손님이 들어올 수 있음) — [check_in, check_out) 반개구간.
@@ -45,8 +46,9 @@ export function RoomCalendar({
   onUpdateNotes: (reservationId: string, notes: string) => void;
   id?: string;
 }) {
-  const today = new Date();
-  const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  // "오늘"은 한국시간 기준(서버 SSR이 UTC여도 동일하게) — kstNow는 getUTC* 게터로만 읽는다.
+  const today = kstNow();
+  const [cursor, setCursor] = useState({ y: today.getUTCFullYear(), m: today.getUTCMonth() });
   const [selected, setSelected] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export function RoomCalendar({
   const { y, m } = cursor;
   const startWeekday = new Date(y, m, 1).getDay();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
-  const todayIso = toISODate(today.getFullYear(), today.getMonth(), today.getDate());
+  const todayIso = toISODate(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
 
   const cells: (string | null)[] = [];
   for (let i = 0; i < startWeekday; i++) cells.push(null);
