@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roomCodeOf, roomSortIndex } from './rooms';
+import { roomCodeOf, roomSortIndex, displayRoomName } from './rooms';
 
 describe('roomCodeOf', () => {
   it('page 계열 설명 문구가 붙어도 코드만 뽑는다', () => {
@@ -47,5 +47,23 @@ describe('roomSortIndex', () => {
   it('매칭 안 되는 방/null은 맨 뒤로 보낸다', () => {
     expect(roomSortIndex('알 수 없는 방')).toBeGreaterThan(roomSortIndex('객실 남쪽'));
     expect(roomSortIndex(null)).toBeGreaterThan(roomSortIndex('객실 남쪽'));
+  });
+});
+
+describe('displayRoomName', () => {
+  it('게스트하우스는 채널 표기와 무관하게 "객실 서쪽"/"객실 남쪽"으로 통일한다', () => {
+    expect(displayRoomName('서쪽방')).toBe('객실 서쪽');
+    expect(displayRoomName('남쪽방')).toBe('객실 남쪽');
+    expect(displayRoomName('객실 서쪽')).toBe('객실 서쪽');
+    expect(displayRoomName('객실 남쪽')).toBe('객실 남쪽');
+  });
+
+  it('스테이 온 페이지는 책 제목이 붙은 원문을 그대로 보여준다', () => {
+    expect(displayRoomName('page26 - 시가 내려앉는 순간')).toBe('page26 - 시가 내려앉는 순간');
+  });
+
+  it('매칭 안 되는 방/null은 원문(빈 문자열)을 그대로 돌려준다', () => {
+    expect(displayRoomName('알 수 없는 방')).toBe('알 수 없는 방');
+    expect(displayRoomName(null)).toBe('');
   });
 });

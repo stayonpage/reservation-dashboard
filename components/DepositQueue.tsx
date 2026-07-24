@@ -3,6 +3,7 @@
 import type { Reservation } from '../lib/db-types';
 import { ChannelBadge } from './Badges';
 import { formatWon, formatDateRange, timeAgo, formatOptions } from '../lib/format';
+import { displayRoomName } from '../lib/rooms';
 
 // 입금확인→확정 큐. 현금/미결제 예약만 대상(카드 선결제는 이미 confirmed로 여기 안 옴).
 // 오래 미처리된 건은 강조 — 돈이 걸린 최고위험 지점이라 눈에 띄어야 한다.
@@ -47,7 +48,7 @@ export function DepositQueue({
                     {r.guest_name ?? '이름 미상'} · {formatDateRange(r.check_in, r.check_out)}
                   </div>
                   <div className="card-meta">
-                    {r.room_name}
+                    {displayRoomName(r.room_name)}
                     <br />
                     감지 {timeAgo(r.detected_at, now)}
                     {urgent && ' · 확인 지연'}

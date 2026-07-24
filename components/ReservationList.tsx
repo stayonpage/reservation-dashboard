@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Reservation, BlockTask } from '../lib/db-types';
 import { ChannelBadge, StatusBadge } from './Badges';
 import { formatWon, formatDateRange, timeAgo, formatOptions } from '../lib/format';
+import { displayRoomName } from '../lib/rooms';
 import type { ReservationStatus } from '../lib/types';
 
 // 3채널 통합 리스트 뷰. (캘린더 뷰는 v1 후속 — 지금은 날짜순 리스트로 통합 확인 니즈를 충족)
@@ -74,7 +75,7 @@ export function ReservationList({
                     {r.guest_name ?? '이름 미상'} · {formatDateRange(r.check_in, r.check_out)}
                   </div>
                   <div className="card-meta">
-                    {r.room_name}
+                    {displayRoomName(r.room_name)}
                     <br />
                     감지 {timeAgo(r.detected_at)}
                     {pendingBlocks > 0 && ` · 막을 채널 ${pendingBlocks}곳 남음`}

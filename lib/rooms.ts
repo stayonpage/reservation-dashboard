@@ -46,6 +46,15 @@ export function roomCodeOf(roomName: string | null): string | null {
   return null;
 }
 
+/** 게스트하우스 방만 채널 표기(서쪽방/남쪽방)와 무관하게 코드값("객실 서쪽"/"객실 남쪽")으로
+ * 화면에 통일해서 보여준다. 스테이 온 페이지는 room_name에 책 제목이 붙어 있어(예: "page26 -
+ * 시가 내려앉는 순간") 원문을 그대로 쓴다. */
+export function displayRoomName(roomName: string | null): string {
+  if (!roomName) return '';
+  const code = roomCodeOf(roomName);
+  return code && !code.startsWith('page') ? code : roomName;
+}
+
 const ROOM_ORDER = new Map(ROOMS.map((room, i) => [room.code, i]));
 
 /** ROOMS 배열 순서(= 객실 달력 순서) 기준 정렬 인덱스. 매칭 안 되는 방은 맨 뒤로. */

@@ -3,7 +3,7 @@
 import type { Reservation } from '../lib/db-types';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import { formatDateShort, formatOptions, kstTodayISO, stayNightLabel } from '../lib/format';
-import { roomSortIndex } from '../lib/rooms';
+import { displayRoomName, roomSortIndex } from '../lib/rooms';
 
 // 달력(월간, 클릭해야 상세 보임)과 전체예약(옵션까지 다 보려면 스크롤 많이 필요) 사이의
 // 빠른 훑어보기 용도 — 오늘부터 7일간, 클릭 없이 옵션까지 한 번에 다 보이게.
@@ -66,7 +66,8 @@ export function WeeklyOverview({
                 return (
                   <div key={r.id} className="week-res-row">
                     <div className="week-res-main">
-                      <strong>{r.room_name}</strong> · {r.guest_name ?? '이름 미상'} ·{' '}
+                      <strong>{displayRoomName(r.room_name)}</strong> ·{' '}
+                      {r.guest_name ?? '이름 미상'} ·{' '}
                       {CHANNEL_LABEL[r.channel]}
                       {night && <span className="week-res-night"> · {night}</span>}
                     </div>

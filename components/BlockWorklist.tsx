@@ -5,7 +5,7 @@ import type { BlockTask } from '../lib/db-types';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import { formatDateRange } from '../lib/format';
 import { CHANNEL_COLOR } from './Badges';
-import { ROOMS } from '../lib/rooms';
+import { ROOMS, displayRoomName } from '../lib/rooms';
 
 const COLLAPSED_COUNT = 3;
 
@@ -79,12 +79,13 @@ export function BlockWorklist({
                   ) : unblock ? (
                     <>
                       예약 취소됨 · {t.reservation_guest_name ?? '이름 미상'} ·{' '}
-                      {t.reservation_room_name} — 막아뒀던 걸 다시 열어야 함
+                      {displayRoomName(t.reservation_room_name)} — 막아뒀던 걸 다시 열어야 함
                     </>
                   ) : (
                     <>
                       {t.reservation_channel && CHANNEL_LABEL[t.reservation_channel]} 예약 ·{' '}
-                      {t.reservation_guest_name ?? '이름 미상'} · {t.reservation_room_name}
+                      {t.reservation_guest_name ?? '이름 미상'} ·{' '}
+                      {displayRoomName(t.reservation_room_name)}
                     </>
                   )}
                 </div>
