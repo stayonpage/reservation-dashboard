@@ -16,17 +16,19 @@ function BarRow({
   valueLabel,
   max,
   color,
+  wide,
 }: {
   label: string;
   value: number;
   valueLabel: string;
   max: number;
   color?: string;
+  wide?: boolean;
 }) {
   const pct = max > 0 ? Math.max((value / max) * 100, value > 0 ? 2 : 0) : 0;
   return (
     <div className="stat-bar-row">
-      <span className="stat-bar-label">{label}</span>
+      <span className={`stat-bar-label${wide ? ' stat-bar-label-wide' : ''}`}>{label}</span>
       <span className="stat-bar-track">
         <span
           className="stat-bar-fill"
@@ -182,6 +184,17 @@ export function Statistics({ reservations, id }: { reservations: Reservation[]; 
             value={r.occupancyPct}
             valueLabel={`${r.occupancyPct}% (${r.occupiedNights}/${r.totalNights}박)`}
             max={maxRoomOccupancy}
+          />
+        ))}
+        <div className="stat-bar-divider" />
+        {stats.propertyOccupancy.map((p) => (
+          <BarRow
+            key={p.property}
+            label={p.property}
+            value={p.occupancyPct}
+            valueLabel={`${p.occupancyPct}% (${p.occupiedNights}/${p.totalNights}박)`}
+            max={maxRoomOccupancy}
+            wide
           />
         ))}
       </div>

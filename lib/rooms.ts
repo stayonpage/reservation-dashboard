@@ -45,3 +45,12 @@ export function roomCodeOf(roomName: string | null): string | null {
 
   return null;
 }
+
+const ROOM_ORDER = new Map(ROOMS.map((room, i) => [room.code, i]));
+
+/** ROOMS 배열 순서(= 객실 달력 순서) 기준 정렬 인덱스. 매칭 안 되는 방은 맨 뒤로. */
+export function roomSortIndex(roomName: string | null): number {
+  const code = roomCodeOf(roomName);
+  const idx = code ? ROOM_ORDER.get(code) : undefined;
+  return idx ?? ROOMS.length;
+}

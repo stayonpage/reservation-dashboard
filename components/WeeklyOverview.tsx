@@ -3,6 +3,7 @@
 import type { Reservation } from '../lib/db-types';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import { formatDateShort, formatOptions, kstTodayISO, stayNightLabel } from '../lib/format';
+import { roomSortIndex } from '../lib/rooms';
 
 // 달력(월간, 클릭해야 상세 보임)과 전체예약(옵션까지 다 보려면 스크롤 많이 필요) 사이의
 // 빠른 훑어보기 용도 — 오늘부터 7일간, 클릭 없이 옵션까지 한 번에 다 보이게.
@@ -46,7 +47,7 @@ export function WeeklyOverview({
       {days.map((date) => {
         const dayReservations = active
           .filter((r) => isOccupied(r.check_in, r.check_out, date))
-          .sort((a, b) => (a.room_name ?? '').localeCompare(b.room_name ?? ''));
+          .sort((a, b) => roomSortIndex(a.room_name) - roomSortIndex(b.room_name));
 
         const dow = dayOfWeek(date);
         const dowCls = dow === 0 ? 'sun' : dow === 6 ? 'sat' : '';

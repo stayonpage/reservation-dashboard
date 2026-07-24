@@ -76,6 +76,40 @@ describe('computeStats', () => {
     expect(page452.revenue).toBe(0);
   });
 
+  it('프로퍼티별 점유율은 소속 방들의 occupiedNights/totalNights를 합산해 계산한다', () => {
+    const reservations = [
+      makeReservation({
+        id: 'a',
+        room_name: 'page26 - 시가 내려앉는 순간',
+        check_in: '2026-07-05',
+        check_out: '2026-07-08', // page26 3박
+      }),
+      makeReservation({
+        id: 'b',
+        room_name: 'page452 - 지금, 나를 세우는 시간',
+        check_in: '2026-07-10',
+        check_out: '2026-07-11', // page452 1박
+      }),
+      makeReservation({
+        id: 'c',
+        room_name: '객실 서쪽',
+        check_in: '2026-07-01',
+        check_out: '2026-07-06', // 게스트 서쪽 5박
+      }),
+    ];
+    const stats = computeStats(reservations, range);
+    // 스테이 온 페이지: 4개 방 × 30박 = 120박 중 4박 참(3+1, page8·127은 0).
+    const stay = stats.propertyOccupancy.find((p) => p.property === '스테이 온 페이지')!;
+    expect(stay.occupiedNights).toBe(4);
+    expect(stay.totalNights).toBe(120);
+    expect(stay.occupancyPct).toBe(Math.round((4 / 120) * 1000) / 10);
+    // 게스트하우스: 2개 방 × 30박 = 60박 중 5박 참(서쪽 5, 남쪽 0).
+    const guesthouse = stats.propertyOccupancy.find((p) => p.property === '게스트하우스')!;
+    expect(guesthouse.occupiedNights).toBe(5);
+    expect(guesthouse.totalNights).toBe(60);
+    expect(guesthouse.occupancyPct).toBe(Math.round((5 / 60) * 1000) / 10);
+  });
+
   it('옵션별 개수·금액을 합산한다(같은 옵션명이 여러 예약에 걸쳐 나와도)', () => {
     const reservations = [
       makeReservation({

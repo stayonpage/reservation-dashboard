@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roomCodeOf } from './rooms';
+import { roomCodeOf, roomSortIndex } from './rooms';
 
 describe('roomCodeOf', () => {
   it('page 계열 설명 문구가 붙어도 코드만 뽑는다', () => {
@@ -25,5 +25,27 @@ describe('roomCodeOf', () => {
   it('매칭 안 되는 방/null은 null', () => {
     expect(roomCodeOf('알 수 없는 방')).toBeNull();
     expect(roomCodeOf(null)).toBeNull();
+  });
+});
+
+describe('roomSortIndex', () => {
+  it('ROOMS 배열 순서(객실 달력과 동일)를 따른다', () => {
+    const names = ['객실 남쪽', 'page127 - 별서에서 흐르는 시간', '서쪽방', 'page26 - 시가 내려앉는 순간'];
+    const sorted = [...names].sort((a, b) => roomSortIndex(a) - roomSortIndex(b));
+    expect(sorted).toEqual([
+      'page26 - 시가 내려앉는 순간',
+      'page127 - 별서에서 흐르는 시간',
+      '서쪽방', // 객실 서쪽
+      '객실 남쪽',
+    ]);
+  });
+
+  it('채널마다 표기가 달라도(예: "객실 서쪽" vs "서쪽방") 같은 순서로 묶인다', () => {
+    expect(roomSortIndex('객실 서쪽')).toBe(roomSortIndex('서쪽방'));
+  });
+
+  it('매칭 안 되는 방/null은 맨 뒤로 보낸다', () => {
+    expect(roomSortIndex('알 수 없는 방')).toBeGreaterThan(roomSortIndex('객실 남쪽'));
+    expect(roomSortIndex(null)).toBeGreaterThan(roomSortIndex('객실 남쪽'));
   });
 });

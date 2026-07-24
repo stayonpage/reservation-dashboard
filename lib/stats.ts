@@ -39,6 +39,13 @@ export interface PropertyStat {
   reservationCount: number;
 }
 
+export interface PropertyOccupancyStat {
+  property: string;
+  occupiedNights: number;
+  totalNights: number;
+  occupancyPct: number; // 0~100
+}
+
 export interface DailyRevenue {
   date: string;
   revenue: number;
@@ -51,6 +58,7 @@ export interface StatsSummary {
   cancelledCount: number;
   averageAmount: number;
   rooms: RoomStat[];
+  propertyOccupancy: PropertyOccupancyStat[];
   options: OptionStat[];
   channels: ChannelStat[];
   properties: PropertyStat[];
@@ -122,6 +130,23 @@ export function computeStats(
     };
   });
 
+  // --- 프로퍼티별 점유율: 같은 프로퍼티 방들의 occupiedNights/totalNights를 합산(단순 평균이
+  // 아니라 방-박 단위 합산이어야 방 개수가 다른 두 프로퍼티를 공정하게 비교할 수 있다). ---
+  const propertyOccupancy: PropertyOccupancyStat[] = [...new Set(ROOMS.map((r) => r.property))].map(
+    (property) => {
+      const roomsInProperty = rooms.filter((r) => r.property === property);
+      const occupiedNights = roomsInProperty.reduce((sum, r) => sum + r.occupiedNights, 0);
+      const totalNightsSum = roomsInProperty.reduce((sum, r) => sum + r.totalNights, 0);
+      return {
+        property,
+        occupiedNights,
+        totalNights: totalNightsSum,
+        occupancyPct:
+          totalNightsSum > 0 ? Math.round((occupiedNights / totalNightsSum) * 1000) / 10 : 0,
+      };
+    },
+  );
+
   // --- 옵션별. ---
   // 네이버 파서(lib/parsers/naver.ts)는 결제내역 문자열을 '+'로 쪼개면서 방 기본요금 항목도
   // options 배열에 함께 담는다(이름이 그 예약의 room_name과 완전히 같음) — 진짜 추가옵션이
@@ -180,6 +205,7 @@ export function computeStats(
     cancelledCount,
     averageAmount: inPeriod.length > 0 ? Math.round(totalRevenue / inPeriod.length) : 0,
     rooms,
+    propertyOccupancy,
     options,
     channels,
     properties,

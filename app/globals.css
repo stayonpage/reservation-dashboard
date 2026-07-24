@@ -841,6 +841,15 @@ section {
   text-overflow: ellipsis;
 }
 
+.stat-bar-label-wide {
+  width: 128px;
+}
+
+.stat-bar-divider {
+  border-top: 1px dashed var(--border);
+  margin: 8px 0;
+}
+
 .stat-bar-track {
   flex: 1;
   height: 10px;
