@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { parseStayfolioIcs } from '../parsers/stayfolio-ics';
 import { STAYFOLIO_ROOM_ICS_URLS } from '../parsers/stayfolio-rooms';
+import { kstTodayISO } from '../format';
 
 // 스테이폴리오는 취소 이메일을 보내지 않는다(운영자 확인, 2026-07) — 그래서 취소는
 // ICS 캘린더를 주기적으로 다시 읽어 "전에 있던 예약번호가 사라짐"으로 간접 추론한다.
@@ -8,6 +9,16 @@ import { STAYFOLIO_ROOM_ICS_URLS } from '../parsers/stayfolio-rooms';
 // 안전장치: ICS 조회 자체가 실패한 방은 그 방의 예약을 전부 건너뛴다(취소 처리 안 함).
 // 네트워크 오류·일시적 5xx를 "전부 취소됨"으로 오판하면 절대 안 되기 때문 —
 // 이게 이 모듈에서 가장 중요한 불변식이다.
+//
+// 두 번째 불변식(2026-07-25 실사고로 발견): 스테이폴리오 ICS는 지난 밤이 된 순간(그쪽도
+// 한국시간 기준으로 보임) 그날 체크아웃하는 예약을 캘린더에서 바로 빼버린다 — 취소된 게
+// 아니라 그냥 "더 이상 막아야 할 미래 날짜가 아니라서" 지워지는 것. 그런데 우리 쪽 대상
+// 필터가 UTC 자정 기준 오늘을 써서, 한국시간 자정~오전 9시(=UTC 전날 15~24시) 사이에
+// 30분마다 도는 대사 잡이 "체크아웃 당일"인 예약을 걸러내지 못하고 그대로 조회해버리면,
+// ICS엔 이미 사라졌지만 실제로는 멀쩡한 예약을 취소로 오판한다(최은수/7·25 체크아웃 건
+// 실사고 — cancelled_at이 정확히 한국시간 00:00:01). 그래서 대상 필터도 한국시간 기준
+// "오늘"을 쓰고, 체크아웃 당일 예약은 아예 대사 대상에서 뺀다(체크아웃일 이전에 취소됐다면
+// 그 전날 이미 ICS에서 사라져 정상적으로 잡혔을 것이므로, 당일만 빼도 놓치는 취소는 없다).
 
 export interface ReconcileResult {
   checkedRooms: number;
@@ -51,15 +62,16 @@ export async function reconcileStayfolioCancellations(): Promise<ReconcileResult
     errors: [],
   };
 
-  // 대상: 아직 체크아웃 전이고, 취소 상태가 아니며, ICS 매칭으로 얻은 "진짜"(숫자) 예약번호를
-  // 가진 스테이폴리오 예약만. 합성키(guest_email|...) 예약은 ICS와 대조할 수 없어 제외.
-  const today = new Date().toISOString().slice(0, 10);
+  // 대상: 체크아웃 당일이 아직 안 됐고(엄격히 이후), 취소 상태가 아니며, ICS 매칭으로 얻은
+  // "진짜"(숫자) 예약번호를 가진 스테이폴리오 예약만. 합성키(guest_email|...) 예약은 ICS와
+  // 대조할 수 없어 제외. "오늘"은 한국시간 기준(위 두 번째 불변식 주석 참고).
+  const today = kstTodayISO();
   const { data: reservations, error } = await supabase
     .from('reservations')
     .select('id, channel_reservation_id, room_name')
     .eq('channel', 'stayfolio')
     .neq('status', 'cancelled')
-    .gte('check_out', today)
+    .gt('check_out', today)
     .returns<ActiveReservation[]>();
 
   if (error) throw error;

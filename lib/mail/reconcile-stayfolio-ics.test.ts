@@ -1,16 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Supabase 쿼리 빌더(.from().select().eq()...)는 체이닝 후 최종적으로 await되는 thenable —
 // 체이닝 메서드는 전부 this를 반환하다가 select 결과를 담은 프라미스로 resolve되게 모킹한다.
 let mockReservations: unknown[] = [];
 let mockQueryError: unknown = null;
 const mockRpc = vi.fn().mockResolvedValue({ error: null });
+let lastQueryCalls: Record<string, unknown[]> = {};
 
 function makeQueryBuilder() {
   const builder: Record<string, unknown> = {};
-  const chain = ['select', 'eq', 'neq', 'gte', 'returns'];
+  const chain = ['select', 'eq', 'neq', 'gte', 'gt', 'returns'];
   for (const m of chain) {
-    builder[m] = vi.fn(() => builder);
+    builder[m] = vi.fn((...args: unknown[]) => {
+      lastQueryCalls[m] = args;
+      return builder;
+    });
   }
   builder.then = (resolve: (v: { data: unknown; error: unknown }) => void) =>
     resolve({ data: mockReservations, error: mockQueryError });
@@ -33,6 +37,25 @@ describe('reconcileStayfolioCancellations', () => {
     mockQueryError = null;
     mockRpc.mockClear();
     mockRpc.mockResolvedValue({ error: null });
+    lastQueryCalls = {};
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('★ 안전장치: 대상 필터는 한국시간 기준 "오늘"을 쓰고, 체크아웃 당일 예약은 대사 대상에서 뺀다 — ' +
+    '2026-07-25 실사고(스테이폴리오 ICS가 한국시간 자정에 체크아웃 당일 예약을 먼저 지워버려 ' +
+    'UTC 자정 전까지 아직 안 걸러진 정상 예약을 취소로 오판) 재발 방지', async () => {
+    // UTC 2026-07-25T16:00:00Z = KST 2026-07-26T01:00 — 위험 구간(한국 자정~UTC 자정 사이).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-25T16:00:00Z'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: async () => '' }));
+
+    await reconcileStayfolioCancellations();
+
+    expect(lastQueryCalls.gt).toEqual(['check_out', '2026-07-26']);
+    expect(lastQueryCalls.gte).toBeUndefined();
   });
 
   it('ICS에 여전히 있는 예약번호는 건드리지 않는다', async () => {
