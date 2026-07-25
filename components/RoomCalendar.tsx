@@ -80,12 +80,8 @@ export function RoomCalendar({
   for (let i = 0; i < startWeekday; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(toISODate(y, m, d));
 
-  // 지난 날짜는 달력에서 빈 방으로 보여준다 — 운영 화면(오늘 이후 상태만 필요)에서 지난 예약을
-  // 지워서 캘린더를 깔끔하게 유지한다. 기록 자체는 지우지 않고 전체 예약/통계에서 그대로 조회 가능.
   const roomsForDate = (date: string) =>
     ROOMS.map((room) => {
-      if (date < todayIso) return { room, reservation: null, manualBlock: null };
-
       const reservation =
         active.find(
           (r) =>
@@ -119,7 +115,7 @@ export function RoomCalendar({
     reservation: Reservation | null,
     manualBlock: BlockTask | null,
   ) => {
-    if (!selected || selected < todayIso) return; // 지난 날짜는 빈 방으로만 보여줄 뿐, 조작 대상 아님
+    if (!selected) return;
 
     if (reservation) {
       if (
