@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Reservation, BlockTask } from './db-types';
 import type { Channel } from './types';
-import { kstTodayISO } from './format';
 
 // 서버 컴포넌트 초기 로드용 조회. DB 컬럼명이 Reservation/BlockTask 타입과 이미 1:1이라
 // 캐스팅 위주로 단순하게 유지(실시간 갱신은 컴포넌트의 postgres_changes 구독이 담당).
@@ -9,14 +8,14 @@ import { kstTodayISO } from './format';
 export async function getReservations(
   supabase: SupabaseClient,
 ): Promise<Reservation[]> {
-  // 대시보드는 지원의 "오늘의 업무" 화면 — 체크아웃이 지난 과거 예약은 제외한다.
-  // (메일 백로그를 통째로 수집하므로 과거 이력이 수백 건 쌓일 수 있음. 이력 조회 화면은 추후.)
-  // "오늘"은 한국시간 기준 — UTC 서버에서 자정~오전9시(KST) 사이에 어제로 밀리지 않게.
-  const today = kstTodayISO();
+  // 예전엔 체크아웃이 지난 과거 예약을 서버 쿼리에서부터 제외했다("오늘의 업무" 화면 취지) —
+  // 그런데 이러면 통계도 과거 기간을 조회할 때마다 이미 체크아웃한 예약이 통째로 빠져서
+  // 매출·점유율이 틀리게 나온다(운영자 피드백, 2026-07: "통계가 어제부터 계산된 것처럼
+  // 나온다"). 캘린더에서도 지난 예약을 계속 보고 싶다는 요청까지 겹쳐서, 과거 제외를 없애고
+  // 전체 예약을 다 가져온다. 목록 화면(전체 예약)은 3건+더보기로 접어서 많아져도 안 불편하다.
   const { data, error } = await supabase
     .from('reservations')
     .select('*')
-    .gte('check_out', today)
     .order('check_in', { ascending: true });
   if (error) throw error;
   return (data ?? []) as Reservation[];
