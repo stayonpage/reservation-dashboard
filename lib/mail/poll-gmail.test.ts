@@ -50,7 +50,17 @@ describe('pollGmailStayfolioInbox', () => {
     await pollGmailStayfolioInbox();
 
     expect(mockClient.search).toHaveBeenCalledWith(
-      expect.objectContaining({ seen: false, from: 'hello@stayfolio.com' }),
+      expect.objectContaining({ from: 'hello@stayfolio.com', since: expect.any(Date) }),
+      expect.anything(),
+    );
+  });
+
+  it('★ 안전장치: seen 여부로 거르지 않는다(사람이 먼저 읽어도 잡아야 함 — 2026-08-12 실사고)', async () => {
+    mockClient.search.mockResolvedValue([]);
+    await pollGmailStayfolioInbox();
+
+    expect(mockClient.search).toHaveBeenCalledWith(
+      expect.not.objectContaining({ seen: expect.anything() }),
       expect.anything(),
     );
   });
@@ -113,13 +123,23 @@ describe('pollGmailImwebInbox', () => {
 
     expect(mockClient.search).toHaveBeenCalledWith(
       expect.objectContaining({
-        seen: false,
         from: 'misomamy@naver.com',
+        since: expect.any(Date),
       }),
       expect.anything(),
     );
     expect(mockClient.search).toHaveBeenCalledWith(
       expect.not.objectContaining({ subject: expect.anything() }),
+      expect.anything(),
+    );
+  });
+
+  it('★ 안전장치: seen 여부로 거르지 않는다(같은 개인 메일함이라 stayfolio와 동일한 위험)', async () => {
+    mockClient.search.mockResolvedValue([]);
+    await pollGmailImwebInbox();
+
+    expect(mockClient.search).toHaveBeenCalledWith(
+      expect.not.objectContaining({ seen: expect.anything() }),
       expect.anything(),
     );
   });

@@ -13,6 +13,14 @@ import { extractPlainText } from './extract-text';
 // 그러지 않으면 무관한 개인 메일까지 \Seen 처리해버리는 부작용이 생긴다.
 //
 // 정책: 지메일도 네이버와 동일하게 2단계 인증 + "앱 비밀번호" 필요.
+//
+// ⚠️ 실사고(2026-08-12): "안읽음(seen:false)"만 검색해서 김석준님 예약 변경(재예약) 메일 하나가
+// 통째로 유실됐다. 개인 메일함이라 우리 폴러가 확인하기 전에 사장님이 알림 보고 메일 앱에서
+// 먼저 열어보기만 해도 "읽음"으로 바뀌어 폴러가 영영 못 찾는다 — 취소 메일은 잡혔는데 그 직후
+// 온 재예약 메일만 조용히 빠짐(ingest_log에 흔적조차 없었음). 그래서 seen 여부로 거르지 않고
+// 최근 며칠치를 매번 다시 훑는다 — handleIncoming이 (source, external_id) unique 제약으로
+// 이미 처리한 메일은 값싸게 'duplicate'로 걸러주므로 재처리 비용은 없다.
+const LOOKBACK_DAYS = 30;
 
 export interface PollResult {
   checked: number;
@@ -52,9 +60,12 @@ export async function pollGmailStayfolioInbox(): Promise<PollResult> {
   await client.connect();
   const lock = await client.getMailboxLock('INBOX');
   try {
-    // 반드시 발신자로 좁힌다 — 개인 메일함이라 다른 메일은 절대 건드리면 안 됨.
+    // 발신자로 좁히고(개인 메일함이라 다른 메일은 절대 건드리면 안 됨), seen 여부로는 거르지
+    // 않는다(위 실사고 주석 참고) — 최근 LOOKBACK_DAYS일치를 매번 다시 훑되, 이미 처리한
+    // 메일은 handleIncoming의 unique 제약이 값싸게 걸러준다.
+    const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 3_600_000);
     const searchResult = await client.search(
-      { seen: false, from: STAYFOLIO_SENDER },
+      { since, from: STAYFOLIO_SENDER },
       { uid: true },
     );
     const uids = searchResult === false ? [] : searchResult;
@@ -136,8 +147,11 @@ export async function pollGmailImwebInbox(): Promise<PollResult> {
   await client.connect();
   const lock = await client.getMailboxLock('INBOX');
   try {
+    // seen 여부로 거르지 않는 이유는 pollGmailStayfolioInbox 상단 주석 참고 — 같은 개인
+    // 메일함이라 아임웹 알림도 똑같이 무음 유실될 수 있다.
+    const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 3_600_000);
     const searchResult = await client.search(
-      { seen: false, from: IMWEB_RELAY_SENDER },
+      { since, from: IMWEB_RELAY_SENDER },
       { uid: true },
     );
     const uids = searchResult === false ? [] : searchResult;
