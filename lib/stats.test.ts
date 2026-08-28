@@ -12,6 +12,8 @@ function makeReservation(overrides: Partial<Reservation>): Reservation {
     room_name: 'page26 - 시가 내려앉는 순간',
     check_in: '2026-07-05',
     check_out: '2026-07-06',
+    prev_check_in: null,
+    prev_check_out: null,
     amount: 100000,
     options: [],
     payment_method: 'unknown',
