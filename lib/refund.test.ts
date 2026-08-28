@@ -52,10 +52,13 @@ describe('refundForChange', () => {
     expect(r.refundable).toBe(0);
   });
 
-  it('반올림', () => {
-    const r = refundForChange('2026-03-19', 12345, '2026-03-10'); // 9일 → 90%
-    expect(r.penalty).toBe(1234); // Math.round(12345 * (1 - 0.9))
-    expect(r.refundable).toBe(12345 - 1234); // 11111
+  it('반올림 (정수 퍼센트로 ±1원 오차 제거)', () => {
+    const r = refundForChange('2026-03-19', 12345, '2026-03-10'); // 9일 → 10% 위약금
+    expect(r.daysBefore).toBe(9);
+    expect(r.refundRate).toBe(0.9);
+    expect(r.hasPenalty).toBe(true);
+    expect(r.penalty).toBe(1235); // Math.round(12345 * 10 / 100)
+    expect(r.refundable).toBe(11110); // 12345 - 1235
   });
 
   it('금액 미상: penalty/refundable null, amountKnown false', () => {
@@ -64,5 +67,36 @@ describe('refundForChange', () => {
     expect(r.penalty).toBeNull();
     expect(r.refundable).toBeNull();
     expect(r.hasPenalty).toBe(true); // 구간상 위약금 발생
+  });
+
+  it('정확히 10일: refundRate 1, hasPenalty false, penalty 0', () => {
+    const r = refundForChange('2026-03-20', 150000, '2026-03-10'); // 정확히 10일
+    expect(r.daysBefore).toBe(10);
+    expect(r.refundRate).toBe(1);
+    expect(r.hasPenalty).toBe(false);
+    expect(r.penalty).toBe(0);
+    expect(r.refundable).toBe(150000);
+  });
+
+  it('금액 미상(null): daysBefore/refundRate는 정상 계산', () => {
+    const r = refundForChange('2026-03-15', null, '2026-03-10'); // 5일 → 50% 환불
+    expect(r.daysBefore).toBe(5);
+    expect(r.refundRate).toBe(0.5);
+    expect(r.hasPenalty).toBe(true);
+    expect(r.penalty).toBeNull();
+    expect(r.refundable).toBeNull();
+    expect(r.amountKnown).toBe(false);
+  });
+
+  it('0원 이하: penalty 0, refundable 0', () => {
+    const r0 = refundForChange('2026-03-19', 0, '2026-03-10'); // 9일, 0원
+    expect(r0.daysBefore).toBe(9);
+    expect(r0.penalty).toBe(0);
+    expect(r0.refundable).toBe(0);
+
+    const rNeg = refundForChange('2026-03-19', -100, '2026-03-10'); // 음수 (비정상 입력)
+    expect(rNeg.daysBefore).toBe(9);
+    expect(rNeg.penalty).toBe(-10); // Math.round(-100 * 10 / 100)
+    expect(rNeg.refundable).toBe(-90); // -100 - (-10)
   });
 });
