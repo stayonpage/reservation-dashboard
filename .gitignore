@@ -9,3 +9,4 @@ build/
 npm-debug.log*
 supabase/.temp/
 .vercel
+.superpowers/
