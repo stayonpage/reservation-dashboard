@@ -194,7 +194,13 @@ begin
     or (v_opts <> '[]'::jsonb     and v_opts        is distinct from coalesce(v_existing.options, '[]'::jsonb));
 
   -- 원문은 어느 쪽이든 최신으로 보존(재파싱·감사).
-  update reservations set raw_payload = p_raw where id = v_id;
+  -- 결제수단·결제상태는 0014 처럼 활성 재수신마다 재동기화한다(예: 입금대기→입금완료).
+  -- 날짜/객실/이름/금액/옵션 변경만 검토 큐(reservation_changes)로 라우팅하고, 결제 필드는 즉시 반영.
+  update reservations
+     set raw_payload    = p_raw,
+         payment_method = p_payment_method,
+         payment_status = p_payment_status
+   where id = v_id;
 
   if v_changed then
     insert into reservation_changes (
@@ -220,8 +226,7 @@ begin
       new_options        = excluded.new_options,
       new_payment_method = excluded.new_payment_method,
       new_payment_status = excluded.new_payment_status,
-      new_raw_payload    = excluded.new_raw_payload,
-      updated_at         = now();
+      new_raw_payload    = excluded.new_raw_payload;
 
     insert into reservation_events (reservation_id, actor, type, detail)
       values (v_id, null, 'updated',
@@ -320,13 +325,13 @@ begin
 
   -- 6a) 예약 본체 in-place 갱신(id 유지). notes(직원 메모)는 건드리지 않음.
   update reservations set
-    guest_name     = c.new_guest_name,
+    guest_name     = coalesce(c.new_guest_name, guest_name),
     guest_phone    = coalesce(c.new_guest_phone, guest_phone),
     room_name      = c.new_room_name,
     check_in       = c.new_check_in,
     check_out      = c.new_check_out,
     amount         = coalesce(c.new_amount, amount),
-    options        = c.new_options,
+    options        = case when c.new_options <> '[]'::jsonb then c.new_options else options end,
     payment_method = c.new_payment_method,
     payment_status = c.new_payment_status,
     status         = v_new_status,
