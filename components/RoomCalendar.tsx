@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import type { Reservation, BlockTask } from '../lib/db-types';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import { ROOMS, roomCodeOf } from '../lib/rooms';
-import { formatOptions, kstNow, stayNightLabel } from '../lib/format';
+import { formatOptions, kstNow, stayNightLabel, formatDateShort } from '../lib/format';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -272,6 +272,12 @@ export function RoomCalendar({
                       <div className="cal-notes-row">
                         {reservation.notes && (
                           <span className="cal-notes-preview">{reservation.notes}</span>
+                        )}
+                        {reservation.prev_check_in && reservation.prev_check_out && (
+                          <span className="cal-prev-dates">
+                            이전 {formatDateShort(reservation.prev_check_in)}~
+                            {formatDateShort(reservation.prev_check_out)}
+                          </span>
                         )}
                         <button
                           type="button"

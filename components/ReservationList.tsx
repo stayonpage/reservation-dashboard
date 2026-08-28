@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import type { Reservation, BlockTask } from '../lib/db-types';
-import { ChannelBadge, StatusBadge } from './Badges';
-import { formatWon, formatDateRange, timeAgo, formatOptions } from '../lib/format';
+import { ChannelBadge, StatusBadge, ChangeRequestBadge } from './Badges';
+import { formatWon, formatDateRange, timeAgo, formatOptions, formatDateShort } from '../lib/format';
 import { displayRoomName } from '../lib/rooms';
 import type { ReservationStatus } from '../lib/types';
 
@@ -23,10 +23,12 @@ const TABS: { key: ReservationStatus | 'all'; label: string }[] = [
 export function ReservationList({
   reservations,
   blockTasks,
+  pendingChangeReservationIds,
   id,
 }: {
   reservations: Reservation[];
   blockTasks: BlockTask[];
+  pendingChangeReservationIds: Set<string>;
   id?: string;
 }) {
   const [tab, setTab] = useState<ReservationStatus | 'all'>('all');
@@ -88,6 +90,15 @@ export function ReservationList({
                     <br />
                     감지 {timeAgo(r.detected_at)}
                     {pendingBlocks > 0 && ` · 막을 채널 ${pendingBlocks}곳 남음`}
+                    {r.prev_check_in && r.prev_check_out && (
+                      <>
+                        <br />
+                        <span className="prev-dates">
+                          이전 {formatDateShort(r.prev_check_in)}~
+                          {formatDateShort(r.prev_check_out)} 에서 변경
+                        </span>
+                      </>
+                    )}
                     {r.options.length > 0 && (
                       <>
                         <br />
@@ -101,6 +112,7 @@ export function ReservationList({
               <div className="badge-row">
                 <ChannelBadge channel={r.channel} />
                 <StatusBadge status={r.status} />
+                {pendingChangeReservationIds.has(r.id) && <ChangeRequestBadge />}
               </div>
             </div>
           );

@@ -1135,3 +1135,4 @@ section {
   padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
   background: transparent; cursor: pointer; font-size: 13px;
 }
+.prev-dates, .cal-prev-dates { color: var(--st-awaiting); font-size: 11px; }
