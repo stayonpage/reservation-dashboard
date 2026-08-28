@@ -4,6 +4,7 @@ import {
   getReservations,
   getBlockTasks,
   getLastSyncByChannel,
+  getPendingReservationChanges,
 } from '../lib/queries';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import type { Channel } from '../lib/types';
@@ -36,10 +37,11 @@ export default async function DashboardPage() {
   }
 
   const supabase = await createClient();
-  const [reservations, blockTasks, lastSync] = await Promise.all([
+  const [reservations, blockTasks, lastSync, pendingChanges] = await Promise.all([
     getReservations(supabase),
     getBlockTasks(supabase),
     getLastSyncByChannel(supabase),
+    getPendingReservationChanges(supabase),
   ]);
 
   const now = new Date();
@@ -90,6 +92,7 @@ export default async function DashboardPage() {
       <DashboardRealtime
         initialReservations={reservations}
         initialBlockTasks={blockTasks}
+        initialChanges={pendingChanges}
       />
     </main>
   );
