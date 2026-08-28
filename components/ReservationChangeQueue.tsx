@@ -54,7 +54,8 @@ export function ReservationChangeQueue({
               room_name: c.new_room_name,
               amount: c.new_amount,
               guest_name: c.new_guest_name,
-              guest_phone: c.new_guest_phone,
+              // 큐에는 직전 전화번호가 없어(reservation_changes에 prev_guest_phone 미저장)
+              // 전화 변경은 라벨로 구분하지 않는다 — 이름 변경만 '예약자 변경'으로 표시.
               options: c.new_options,
             },
           );
