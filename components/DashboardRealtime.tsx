@@ -199,23 +199,34 @@ export function DashboardRealtime({
     });
   };
 
-  const handleKeepChange = (changeId: string) => {
-    setChanges((prev) => prev.filter((c) => c.id !== changeId)); // 낙관적 제거
+  // 낙관적 제거: 이 두 버튼은 카드(=조작 수단) 자체를 없애므로, 서버 액션이 실패하면
+  // 되돌려 놓고 눈에 보이게 알린다(그냥 두면 새로고침 전까지 카드가 사라진 채로 남음).
+  const resolveChange = (
+    changeId: string,
+    action: (id: string) => Promise<{ error: string | null }>,
+    failMsg: string,
+  ) => {
+    const removed = changes.find((c) => c.id === changeId);
+    setChanges((prev) => prev.filter((c) => c.id !== changeId));
     startTransition(() => {
-      keepReservationChange(changeId).then((res) => {
-        if (res.error) console.error('변경 유지 실패:', res.error);
+      action(changeId).then((res) => {
+        if (!res.error) return;
+        console.error(failMsg, res.error);
+        if (removed) {
+          setChanges((prev) =>
+            prev.some((c) => c.id === changeId) ? prev : [removed, ...prev],
+          );
+        }
+        if (typeof window !== 'undefined') window.alert(failMsg);
       });
     });
   };
 
-  const handleConfirmChange = (changeId: string) => {
-    setChanges((prev) => prev.filter((c) => c.id !== changeId));
-    startTransition(() => {
-      confirmReservationChange(changeId).then((res) => {
-        if (res.error) console.error('변경 확정 실패:', res.error);
-      });
-    });
-  };
+  const handleKeepChange = (changeId: string) =>
+    resolveChange(changeId, keepReservationChange, '기존 예약 유지 처리에 실패했습니다. 다시 시도해 주세요.');
+
+  const handleConfirmChange = (changeId: string) =>
+    resolveChange(changeId, confirmReservationChange, '변경 확정에 실패했습니다. 다시 시도해 주세요.');
 
   const handleCreateManualBlock = (
     roomCode: string,

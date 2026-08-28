@@ -1,5 +1,12 @@
 -- 예약 변경 확인 워크플로우.
 --
+-- ⚠️ 배포 순서: 이 마이그레이션을 앱 배포보다 "먼저" 적용해야 한다. app/page.tsx 가
+--    getPendingReservationChanges()를 초기 로드에 포함하므로, reservation_changes 테이블이
+--    없는 상태로 새 앱이 뜨면 대시보드 전체가 500. 적용 후 확인:
+--      select conname from pg_constraint where conrelid='block_tasks'::regclass;
+--    → block_tasks_reservation_id_target_channel_key 가 "없어야" 하고
+--      block_tasks_manual_or_reservation 는 "남아 있어야" 한다.
+--
 -- 지금까지: 같은 예약번호로 변경 메일이 오면 ingest_reservation이 check_in/out 등을 즉시
 -- 덮어썼다 → 원래 날짜·이력 유실, 새 날짜 막기 태스크 미생성.
 --
@@ -106,8 +113,9 @@ begin
     else 'new'
   end::reservation_status;
 
-  v_is_guesthouse := p_room_name like '객실 서쪽%' or p_room_name like '객실 남쪽%'
-                   or p_room_name like '서쪽방%' or p_room_name like '남쪽방%';
+  v_is_guesthouse := coalesce(
+    p_room_name like '객실 서쪽%' or p_room_name like '객실 남쪽%'
+    or p_room_name like '서쪽방%' or p_room_name like '남쪽방%', false);
 
   select * into v_existing
     from reservations
@@ -184,10 +192,20 @@ begin
   end if;
 
   -- ── C) 활성 예약 재수신 ──
+  -- 취소된 예약은 변경 큐로 보내지 않는다(디자인 §5.4). 원문·결제 필드만 최신화.
+  if v_existing.status = 'cancelled' then
+    update reservations
+       set raw_payload    = p_raw,
+           payment_method = p_payment_method,
+           payment_status = p_payment_status
+     where id = v_id;
+    return v_id;
+  end if;
+
   v_changed :=
        p_check_in   is distinct from v_existing.check_in
     or p_check_out  is distinct from v_existing.check_out
-    or p_room_name  is distinct from v_existing.room_name
+    or (p_room_name is not null and p_room_name is distinct from v_existing.room_name)
     or p_guest_name is distinct from v_existing.guest_name
     or (p_amount is not null      and p_amount      is distinct from v_existing.amount)
     or (p_guest_phone is not null and p_guest_phone is distinct from v_existing.guest_phone)
@@ -312,6 +330,15 @@ begin
   if not found then return; end if;
 
   select * into r from reservations where id = c.reservation_id;
+  -- 취소된 예약(Fix 1 배포 전 큐잉됐을 수 있음)은 되살리지 않는다.
+  if not found or r.status = 'cancelled' then return; end if;
+
+  -- 원자적 클레임: pending 행을 confirmed 로 낚아챈다. 두 직원이 동시에(또는 더블클릭으로)
+  -- 눌러도 이 update 는 한 번만 성공하고, 진 쪽은 여기서 빠져나간다 — 6b/6c/6d 중복 실행
+  -- (중복 막기 태스크·이벤트, done→unblock 이중 적용) 방지. keep_reservation_change 와 동일.
+  update reservation_changes
+     set status = 'confirmed', resolved_by = v_uid, resolved_at = now()
+   where id = p_change_id and status = 'pending';
   if not found then return; end if;
 
   v_new_status := case
@@ -320,14 +347,15 @@ begin
     else 'new'
   end::reservation_status;
 
-  v_is_guesthouse := c.new_room_name like '객실 서쪽%' or c.new_room_name like '객실 남쪽%'
-                   or c.new_room_name like '서쪽방%'   or c.new_room_name like '남쪽방%';
+  v_is_guesthouse := coalesce(
+    c.new_room_name like '객실 서쪽%' or c.new_room_name like '객실 남쪽%'
+    or c.new_room_name like '서쪽방%' or c.new_room_name like '남쪽방%', false);
 
   -- 6a) 예약 본체 in-place 갱신(id 유지). notes(직원 메모)는 건드리지 않음.
   update reservations set
     guest_name     = coalesce(c.new_guest_name, guest_name),
     guest_phone    = coalesce(c.new_guest_phone, guest_phone),
-    room_name      = c.new_room_name,
+    room_name      = coalesce(c.new_room_name, room_name),
     check_in       = c.new_check_in,
     check_out      = c.new_check_out,
     amount         = coalesce(c.new_amount, amount),
@@ -367,10 +395,7 @@ begin
         'to',   jsonb_build_object('check_in', c.new_check_in,  'check_out', c.new_check_out))),
     (c.reservation_id, v_uid, 'note', jsonb_build_object('note', '예약 변경 확정'));
 
-  -- 6e) 큐 행 마감
-  update reservation_changes
-     set status = 'confirmed', resolved_by = v_uid, resolved_at = now()
-   where id = p_change_id;
+  -- 큐 행은 함수 진입 시 이미 confirmed 로 클레임됨(위 원자적 update).
 end;
 $$;
 grant execute on function confirm_reservation_change(uuid) to authenticated;

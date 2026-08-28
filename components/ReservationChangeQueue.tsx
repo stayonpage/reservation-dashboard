@@ -59,6 +59,9 @@ export function ReservationChangeQueue({
               options: c.new_options,
             },
           );
+          // 큐에 떠 있는 건 항상 뭔가 바뀐 것 — 라벨이 빌 수 있는 경우(전화만 변경 등,
+          // 직전 전화 미보유로 감지 불가)는 '기타 변경'으로 표시.
+          const summary = fields.length > 0 ? changeSummaryLabel(fields) : '기타 변경';
           // 위약금 기준: 변경 전(직전) 체크인 · 직전 결제금액.
           const refund = refundForChange(c.prev_check_in, c.prev_amount, todayISO);
 
@@ -81,7 +84,7 @@ export function ReservationChangeQueue({
                   <span className="change-tag">변경</span>
                   {formatDateRange(c.new_check_in, c.new_check_out)} ·{' '}
                   {displayRoomName(c.new_room_name)} · {formatWon(c.new_amount)}{' '}
-                  <em>({changeSummaryLabel(fields)})</em>
+                  <em>({summary})</em>
                 </div>
               </div>
 
@@ -136,7 +139,11 @@ function PenaltyBanner({
     return (
       <div className="penalty-banner danger">
         <strong>⚠️ 위약금 {formatWon(total)} (전액) · 환불 불가</strong>
-        <div>체크인 {refund.daysBefore}일 이내 변경</div>
+        <div>
+          {refund.daysBefore < 0
+            ? '체크인 지난 예약'
+            : `체크인 ${refund.daysBefore}일 이내 변경`}
+        </div>
       </div>
     );
   }
