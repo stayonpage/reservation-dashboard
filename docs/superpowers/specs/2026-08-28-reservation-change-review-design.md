@@ -298,3 +298,126 @@ export async function confirmReservationChange(changeId: string): Promise<{ erro
   "예약 변경" 흐름 한정.
 - 실제 환불 실행/PG 연동 없음 — 위약금은 표시만, 처리는 직원 수동.
 - 채널별 방 canonical 매핑(v2 과제) 손대지 않음.
+
+---
+
+# 개정 v2 — 2026-08-29 (취소도 큐로 + 손님 요청사항)
+
+> 운영자 피드백으로 범위 확장. 위 v1 본문과 상충하는 부분은 **이 v2 절이 우선**한다.
+> `feat/reservation-change-review` 브랜치(v1 구현분)는 이 절대로 rework 필요 — §V2-8 참조.
+
+## V2-0. 확정 필요 (제 판단으로 기본값 잡음, 뒤집어도 됨)
+
+| # | 항목 | 기본값(제안) |
+|---|---|---|
+| A | 스테이폴리오 ICS 누락 자동취소(`reconcile-stayfolio-ics`)도 큐로 보낼까 | **예 — 큐로.** 07/25·백필·08/29 오취소가 전부 이 경로. 직원이 스테이폴리오 확인 후 `취소 확정` 눌러야 취소됨 |
+| B | "취소 확정"까지 끝난 뒤 손님이 되살린(재접수) 경우 | **큐에 '취소 철회 확인' 건으로 다시 뜸** → 직원이 `예약 되살리기` / `취소 유지` 선택 (방이 재판매됐을 수 있어 자동 복구 안 함) |
+| C | `room_name`(객실) 변경도 큐로 보낼까 | **예 — 큐로.** 다른 유닛이므로 날짜 변경과 동급 영향 |
+
+## V2-1. "변경 확인" 큐 → "예약 확인" 큐로 일반화
+
+`reservation_changes` 테이블을 `kind` 로 3종을 담는다:
+
+| `kind` | 트리거 | 확정 버튼 | 확정 시 동작 |
+|--------|--------|-----------|--------------|
+| `'change'` | 활성 예약에 **날짜(check_in/out) · 객실(room_name) · 옵션(options)** 중 하나라도 변경된 재수신 | `변경 확정` | v1 §6.2 그대로 (in-place 갱신 + 옛/새 날짜 block 재조정 + 재트리아지) |
+| `'cancel'` | 취소 메일(`p_cancelled`) **또는** `reconcile-stayfolio-ics` 의 "번호 사라짐" 감지 | `취소 확정` | `status='cancelled'` + `cancelled_at` + `cancelled` 이벤트 + block_tasks: pending→skipped / done→pending+unblock (기존 `cancel_reservation` 로직) |
+| `'uncancel'` | `status='cancelled'` 인 예약에 신규 접수 메일(네이버 `cancelled=false`) 또는 ICS 번호 재등장 | `예약 되살리기` | `status` 를 결제상태 기준 재설정 + `cancelled_at=null` + `detected` 이벤트 + 다른 채널 block "막아라" 재생성 |
+
+- **왼쪽 버튼은 항상 `기존 예약 유지`** — 큐 행 `status='kept'` + `note`. 예약·block 그대로.
+- `change` 감지 대상에서 **제외**: `guest_name`, `guest_phone`, `amount`, `payment_*` 단독 변경
+  → 예약 본체 즉시 갱신(현행) + `updated` 이벤트만. (`amount` 는 위약금 계산에 쓰이므로
+  큐에 이미 `cancel`/`change` 건이 있으면 그 스냅샷도 같이 최신화)
+
+### `reservation_changes` 스키마 델타 (v1 대비)
+
+```sql
+alter table reservation_changes
+  add column kind text not null default 'change'
+      check (kind in ('change','cancel','uncancel')),
+  add column cancel_reason text,          -- 'cancel' 일 때 채널이 준 사유 (네이버 취소사유 등)
+  add column cancel_source text;          -- 'channel_notification' | 'stayfolio_ics_missing' | ...
+-- prev_* 는 'cancel'/'uncancel' 에서도 "확정 직전 예약 상태" 스냅샷으로 그대로 사용.
+-- 부분 유니크는 (reservation_id) where status='pending' 유지 — 한 예약에 열린 확인 건은 1개.
+--   (변경 대기 중 취소 메일이 오면 그 pending 행을 kind='cancel' 로 갈아끼움: 취소가 우선)
+```
+
+## V2-2. 큐에 떠 있는 동안 예약 상태
+
+- `change` / `cancel` 대기 중: 예약은 **원래 상태 그대로**(`confirmed` / `awaiting_deposit`).
+  카드에 배지 — `변경 요청`(주황) / `취소 요청`(빨강).
+- `uncancel` 대기 중: 예약은 `cancelled` 유지, 배지 `되살리기 요청`.
+- 큐 카드 버튼:
+  - `change` → `[기존 예약 유지]` `[변경 확정]`
+  - `cancel` → `[기존 예약 유지]` `[취소 확정]` + **위약금 배너**(직전 체크인 기준, `lib/refund.ts` 그대로)
+  - `uncancel` → `[취소 유지]` `[예약 되살리기]`
+
+## V2-3. 자동 철회 (손님이 마음 바꿈)
+
+v1 §5.2 "값 원복 → withdrawn" 을 kind 별로 확장:
+
+| 대기 건 | 이후 들어온 메일 | 처리 |
+|---------|------------------|------|
+| `change` pending | 원래 값으로 되돌린 재수신 | `withdrawn` + `note` (v1 그대로) |
+| `cancel` pending | 신규 접수 메일(네이버, `cancelled=false`) / ICS 번호 재등장 | `cancel` 행 `withdrawn` + `note` "손님이 취소 철회" — 예약 그대로 유지, 직원 액션 불필요 |
+| `cancel` pending | 같은 취소 메일 재수신 | 무시(멱등) |
+
+네이버는 취소 철회 시 같은 예약번호로 **접수 메일이 다시 온다**(실데이터: 접수/취소를 같은
+번호로 별도 발송). 스테이폴리오는 불확실 → ICS 번호 재등장을 보조 신호로 사용하되, 못 잡으면
+직원이 큐에서 `기존 예약 유지`(=`cancel` 건 kept) 로 수동 처리.
+
+## V2-4. `reconcile-stayfolio-ics` 변경
+
+현행: 번호 사라짐 → `cancel_reservation(p_id, 'stayfolio_ics_missing')` **즉시 취소**.
+개정: 즉시 취소 대신 **`reservation_changes` 에 `kind='cancel'`, `cancel_source='stayfolio_ics_missing'` pending 행 생성**.
+- 이미 같은 예약에 pending 확인 건이 있으면 건너뜀(중복 방지).
+- 07/25·08/29 오취소 케이스가 여기서 직원 확인 게이트에 걸려 자동 사고가 사라짐.
+- `lib/mail/reconcile-stayfolio-ics.ts` 의 두 불변식(ICS 조회 실패 방 스킵 / 체크아웃 당일 제외)은 유지.
+
+## V2-5. 손님 요청사항 → 별도 표시 (메모란과 분리)
+
+현재 파서(`naver.ts`, `stayfolio-email.ts`)가 `요청사항` 라벨을 읽지만 버린다(`raw_payload` 에만).
+
+- `lib/types.ts` `ParsedReservation` 에 `guest_request: string | null` 추가.
+- 파서: `요청사항` 값이 "요청사항이 없습니다." / "-" / 빈값이면 `null`, 아니면 그 텍스트.
+- `reservations` 에 `guest_request text` 컬럼 추가. `ingest_reservation` 이 채운다
+  (재수신 시 갱신 — 손님이 요청사항을 바꿀 수 있음). **`change` 큐 트리거 아님**(날짜/객실/옵션만).
+- `reservations.notes`(직원 메모, 0015)와 **완전 분리** — 절대 섞지 않는다.
+- 표시: 예약 카드 / 달력 / 큐 카드에 읽기전용 한 줄 —
+  `손님 요청: 늦은 체크인 (오후 8시경 도착)`. `notes` 는 기존대로 직원 편집.
+- `ReservationChange` 조인/표시에도 `guest_request` 포함(큐 카드에서 참고).
+
+## V2-6. 위약금 배너 — `cancel` 카드에도
+
+`lib/refund.ts` 그대로 재사용. 기준 = **취소 대상 예약의 현재 체크인**까지 남은 일수 · 현재 `amount`.
+`change` 카드는 v1대로 직전 체크인 기준. 배너 문구/4분기 동일.
+
+## V2-7. 이벤트 타입
+
+`event_type` enum 에 값 추가 필요 여부 점검: `uncancel` 확정 시 `detected` 재사용(기존 enum).
+`cancel` 확정은 `cancelled` 재사용. 새 enum 값 불필요 — `detail.source` 로 구분
+(`'reservation_change'` / `'cancel_review'` / `'uncancel_review'`).
+
+## V2-8. `feat/reservation-change-review` 브랜치 rework 범위
+
+이미 구현된 v1 대비 필요한 변경:
+1. `0023` 마이그레이션: `reservation_changes` 에 `kind`/`cancel_reason`/`cancel_source` 추가,
+   `reservations` 에 `guest_request` 추가.
+2. `ingest_reservation`: (a) `change` 감지를 **날짜·객실·옵션** 으로 축소, (b) 취소 메일을
+   branch B 즉시처리 → `kind='cancel'` pending 생성으로 변경, (c) `cancelled` 예약에 접수
+   메일 → `kind='uncancel'` pending, (d) `guest_request` 채우기.
+3. 새 RPC: `confirm_cancel_review` / `confirm_uncancel_review` (또는 `confirm_reservation_change`
+   를 kind 분기). `keep_reservation_change` 는 kind 공용.
+4. `cancel_reservation`(reconcile 용) → pending 생성 함수로 교체.
+5. `lib/types.ts` + 파서 2개: `guest_request`.
+6. `lib/refund.ts`: `cancel` 용 진입점(현재 체크인 기준) 추가 — 순수함수라 인자만 다름.
+7. UI: `ReservationChangeQueue` → kind별 카드/버튼, `취소 요청`/`되살리기 요청` 배지,
+   `손님 요청` 줄(카드·`ReservationList`·`RoomCalendar`).
+8. 테스트: 감지 분기 6종(날짜/옵션/객실 → change, 취소메일 → cancel, ICS누락 → cancel,
+   재접수 → uncancel/withdraw), `refund` 취소 기준, kind별 확정 RPC.
+
+## V2-9. 범위 밖 (여전히)
+
+- 실제 환불/PG 연동 없음 — 위약금은 표시만.
+- 달력의 수동 취소 토글(`staff_cancel_reservation`)은 즉시 취소 유지(직원이 직접 누른 것이라 확인 게이트 불필요).
+- `amount` 변경 자체는 큐 트리거 아님(스냅샷만 갱신).
