@@ -43,10 +43,12 @@ export function DashboardRealtime({
   initialReservations,
   initialBlockTasks,
   initialChanges,
+  todayISO,
 }: {
   initialReservations: Reservation[];
   initialBlockTasks: BlockTask[];
   initialChanges: ReservationChange[];
+  todayISO: string;
 }) {
   const [reservations, setReservations] = useState(initialReservations);
   const [blockTasks, setBlockTasks] = useState(initialBlockTasks);
@@ -371,6 +373,7 @@ export function DashboardRealtime({
         onConfirm={handleConfirmChange}
         onCancelConfirm={handleCancelConfirm}
         onUncancelConfirm={handleUncancelConfirm}
+        todayISO={todayISO}
       />
       <DepositQueue id="deposit" reservations={reservations} onConfirm={handleConfirmDeposit} />
       <BlockWorklist id="block" tasks={blockTasks} onToggle={handleToggleBlock} />

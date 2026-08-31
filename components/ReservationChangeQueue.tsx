@@ -25,7 +25,7 @@ export function ReservationChangeQueue({
   onConfirm: (changeId: string) => void;
   onCancelConfirm: (changeId: string) => void;
   onUncancelConfirm: (changeId: string) => void;
-  todayISO?: string;
+  todayISO: string; // 서버에서 확정한 KST 오늘 — 컴포넌트 내부 fallback 금지(SSR/hydration 불일치)
   id?: string;
 }) {
   const pending = [...changes]
