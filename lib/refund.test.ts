@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { daysUntil, refundRateForDaysBefore, refundForChange } from './refund';
+import { daysUntil, refundRateForDaysBefore, refundForChange, refundFor } from './refund';
 
 describe('daysUntil', () => {
   it('UTC 자정 파싱으로 정수 일수 차이', () => {
@@ -98,5 +98,13 @@ describe('refundForChange', () => {
     expect(rNeg.daysBefore).toBe(9);
     expect(rNeg.penalty).toBe(-10); // Math.round(-100 * 10 / 100)
     expect(rNeg.refundable).toBe(-90); // -100 - (-10)
+  });
+});
+
+describe('refundFor', () => {
+  it('refundFor 는 refundForChange 의 별칭', () => {
+    expect(refundFor('2026-03-17', 150000, '2026-03-10')).toEqual(
+      refundForChange('2026-03-17', 150000, '2026-03-10'),
+    );
   });
 });

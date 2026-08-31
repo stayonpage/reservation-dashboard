@@ -67,3 +67,7 @@ export function refundForChange(
     amountKnown,
   };
 }
+
+// 위약금 계산은 "어떤 체크인까지 며칠 남았나" 하나로 동일하다. change 카드는 직전 체크인,
+// cancel 카드는 현재 예약 체크인을 넘겨 쓴다 — 의미를 드러내려고 이름만 따로 둔다.
+export const refundFor = refundForChange;
