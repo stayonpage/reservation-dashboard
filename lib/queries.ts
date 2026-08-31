@@ -153,7 +153,15 @@ export async function getPendingReservationChanges(
     .select('*, reservation:reservations(channel, notes, guest_request)')
     .eq('status', 'pending')
     .order('new_check_in', { ascending: true });
-  if (error) throw error;
+  if (error) {
+    // 배포 순서 슬립(마이그레이션 0023 미적용)으로 테이블이 없을 때 대시보드 전체가 500 나지 않도록.
+    // 그 외 오류는 그대로 던진다.
+    if (error.code === '42P01') {
+      console.warn('getPendingReservationChanges: reservation_changes 테이블 없음 — 빈 큐로 폴백', error.message);
+      return [];
+    }
+    throw error;
+  }
 
   return ((data ?? []) as unknown as ReservationChangeRow[]).map((row) => ({
     id: row.id,

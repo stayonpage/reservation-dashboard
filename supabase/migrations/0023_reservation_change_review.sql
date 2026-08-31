@@ -91,6 +91,15 @@ create index block_tasks_res_channel_idx on block_tasks (reservation_id, target_
 --  · 취소된 예약에 정상 접수 메일이 오면 kind='uncancel' pending 큐(되살리기 검토).
 --  · change 트리거는 날짜/객실/옵션 변경만(이름·전화·금액 단독 변경은 즉시 반영, lib/reservation-change.ts 와 일치).
 --  · guest_request 는 어느 경로든 항상 즉시 갱신(큐 트리거 아님).
+--
+-- 파라미터 추가는 '교체'가 아니라 '새 오버로드' 생성 — 구버전(12·13-arg)을 명시적으로 제거해야
+-- 큐를 우회하는 즉시취소 경로가 DB에 남지 않는다(구 caller 는 조용히 되살아나는 대신 PGRST202 로 실패).
+drop function if exists ingest_reservation(
+  channel, text, text, text, text, date, date, integer, jsonb,
+  payment_method, payment_status, jsonb, boolean);
+drop function if exists ingest_reservation(
+  channel, text, text, text, text, date, date, integer, jsonb,
+  payment_method, payment_status, jsonb);
 create or replace function ingest_reservation(
   p_channel                channel,
   p_channel_reservation_id text,
@@ -281,6 +290,10 @@ begin
   if found then
     insert into reservation_events (reservation_id, actor, type, detail)
       values (v_id, null, 'updated', jsonb_build_object('source','channel_notification','fields','guest_or_amount'));
+    -- 금액 정정이 대기 중 확인 건의 위약금 기준(prev_amount)에도 반영되도록
+    update reservation_changes
+       set prev_amount = coalesce(p_amount, prev_amount)
+     where reservation_id = v_id and status = 'pending';
   end if;
 
   -- 대기 건 자동 철회
@@ -324,21 +337,25 @@ declare
   v_res  uuid;
   v_from jsonb;
   v_to   jsonb;
+  v_kind text;
 begin
   update reservation_changes
      set status = 'kept', resolved_by = v_uid, resolved_at = now()
    where id = p_change_id and status = 'pending'
-   returning reservation_id,
+   returning reservation_id, kind,
              jsonb_build_object('check_in', prev_check_in, 'check_out', prev_check_out,
                                 'room_name', prev_room_name, 'amount', prev_amount),
              jsonb_build_object('check_in', new_check_in, 'check_out', new_check_out,
                                 'room_name', new_room_name, 'amount', new_amount)
-      into v_res, v_from, v_to;
+      into v_res, v_kind, v_from, v_to;
 
   if v_res is not null then
     insert into reservation_events (reservation_id, actor, type, detail)
       values (v_res, v_uid, 'note',
-              jsonb_build_object('note', '예약 변경 요청 거절 — 기존 예약 유지',
+              jsonb_build_object('note', case v_kind
+                                   when 'cancel'   then '취소 요청 거절 — 기존 예약 유지'
+                                   when 'uncancel' then '되살리기 요청 거절 — 취소 유지'
+                                   else '예약 변경 요청 거절 — 기존 예약 유지' end,
                                  'from', v_from, 'to', v_to));
   end if;
 end;
@@ -447,7 +464,7 @@ begin
   if not found then return; end if;
 
   update reservation_changes set status='confirmed', resolved_by=v_uid, resolved_at=now()
-   where id=p_change_id and status='pending';
+   where id=p_change_id and status='pending' and kind = 'cancel';
   if not found then return; end if;   -- 레이스에서 진 쪽
 
   update reservations set status='cancelled',
@@ -481,7 +498,7 @@ begin
   if not found then return; end if;
 
   update reservation_changes set status='confirmed', resolved_by=v_uid, resolved_at=now()
-   where id=p_change_id and status='pending';
+   where id=p_change_id and status='pending' and kind = 'uncancel';
   if not found then return; end if;
 
   v_new_status := case
@@ -524,7 +541,7 @@ grant execute on function confirm_uncancel_review(uuid) to authenticated;
 -- cancel_reservation(id,'stayfolio_ics_missing') 로 즉시 취소했다. v2 는 큐로만 보낸다.
 create or replace function enqueue_ics_cancel_review(p_reservation_id uuid)
 returns void language plpgsql security definer as $$
-declare r reservations%rowtype;
+declare r reservations%rowtype; v_new_id uuid;
 begin
   select * into r from reservations where id = p_reservation_id;
   if not found or r.status = 'cancelled' then return; end if;
@@ -542,10 +559,14 @@ begin
     r.guest_name, r.guest_phone, r.room_name, r.check_in, r.check_out,
     r.amount, coalesce(r.options,'[]'::jsonb), r.payment_method, r.payment_status, r.raw_payload
   )
-  on conflict (reservation_id) where status = 'pending' do nothing;
-  insert into reservation_events (reservation_id, actor, type, detail)
-    values (p_reservation_id, null, 'note',
-            jsonb_build_object('source','cancel_review_queued','cancel_source','stayfolio_ics_missing'));
+  on conflict (reservation_id) where status = 'pending' do nothing
+  returning id into v_new_id;
+  -- 레이스에서 진 쪽(on conflict do nothing)은 이벤트도 남기지 않는다.
+  if v_new_id is not null then
+    insert into reservation_events (reservation_id, actor, type, detail)
+      values (p_reservation_id, null, 'note',
+              jsonb_build_object('source','cancel_review_queued','cancel_source','stayfolio_ics_missing'));
+  end if;
 end; $$;
 revoke all on function enqueue_ics_cancel_review(uuid) from public;
 grant execute on function enqueue_ics_cancel_review(uuid) to service_role;

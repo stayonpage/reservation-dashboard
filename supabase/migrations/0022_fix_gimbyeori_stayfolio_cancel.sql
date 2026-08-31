@@ -22,12 +22,16 @@ update block_tasks
  where reservation_id = 'e1d80338-a0f7-44e3-aff7-f922f2e0ba16'
    and status = 'pending';
 
+-- 신선한 비운영 DB(verify-0023.sql·배포 체크리스트가 요구하는 환경)엔 이 UUID 예약이 없어
+-- FK 위반으로 마이그레이션 체인이 중단되고 0023 이 영영 안 붙는다. 예약이 있을 때만 삽입.
 insert into reservation_events (reservation_id, actor, type, detail)
-values (
+select
   'e1d80338-a0f7-44e3-aff7-f922f2e0ba16'::uuid,
   null,
   'note',
   jsonb_build_object(
     'note', '7월 백필 때 합성키(진짜 예약번호 없음)로 들어와 자동 취소 감지 대상에서 빠졌던 건 — 운영자 확인 후 취소로 수동 정정함'
   )
+where exists (
+  select 1 from reservations where id = 'e1d80338-a0f7-44e3-aff7-f922f2e0ba16'::uuid
 );
