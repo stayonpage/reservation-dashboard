@@ -52,6 +52,20 @@ describe('parseNaverEmail', () => {
   it('접수 메일은 cancelled=false', () => {
     expect(parseNaverEmail(SAMPLE)!.cancelled).toBe(false);
   });
+
+  it('요청사항 "-" 는 guest_request null', () => {
+    expect(parseNaverEmail(SAMPLE)!.guest_request).toBeNull();
+  });
+
+  it('요청사항 내용이 있으면 그대로 담는다', () => {
+    const withReq = SAMPLE.replace(
+      '요청사항 -',
+      '요청사항 늦은 체크인 부탁드립니다 (오후 9시)',
+    );
+    expect(parseNaverEmail(withReq)!.guest_request).toBe(
+      '늦은 체크인 부탁드립니다 (오후 9시)',
+    );
+  });
 });
 
 // 실제 취소 메일(2026-07 DB 수신분) — 접수 메일과 라벨이 다르다('결제금액', '예약취소 일시').

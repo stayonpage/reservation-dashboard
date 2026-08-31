@@ -121,6 +121,7 @@ export function parseImwebEmail(text: string): ParsedReservation | null {
     payment_method: method,
     payment_status,
     cancelled,
+    guest_request: null, // 아임웹 메일엔 요청사항 라벨 없음
     raw_payload: { source: 'imweb_email', fields: f, text },
   };
 }
