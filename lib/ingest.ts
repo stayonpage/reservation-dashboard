@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { ParsedReservation } from './types';
+import { omaibookPromoEligible, appendPromoNote } from './promo';
 
 // 수신 파이프라인 단일 진입점: 원시 메시지(메일/문자/웹훅) → 멱등 기록 → 파싱 → upsert.
 //
@@ -33,8 +34,10 @@ export async function handleIncoming(args: {
   // 비동기 허용: 스테이폴리오는 파싱 후 ICS 피드를 조회해 진짜 예약번호로 보강한다
   // (stayfolio-rooms.ts + stayfolio-ics.ts 참고) — 이메일 자체엔 예약번호가 없음.
   parse: (raw: string) => ParsedReservation | null | Promise<ParsedReservation | null>;
+  // 스테이폴리오 확정메일 Date 헤더 — 프로모션 신청 기간 판정에 쓴다. 없으면 현재 시각.
+  receivedAt?: Date;
 }): Promise<IngestResult> {
-  const { source, externalId, raw, parse } = args;
+  const { source, externalId, raw, parse, receivedAt } = args;
 
   // 1) 원시 멱등 기록. unique(source, external_id) 충돌 = 이미 받은 메시지 → 중복.
   const { error: logErr } = await supabase
@@ -78,6 +81,37 @@ export async function handleIncoming(args: {
   }
 
   await markLog({ status: 'parsed', parsed_reservation_id: data });
+
+  // 오마이북 3만원 상품권 프로모션 — 대상이면 비고에 안내 문구를 남긴다(best-effort:
+  // 실패해도 예약 수신 자체는 성공으로 둔다).
+  try {
+    if (
+      omaibookPromoEligible({
+        channel: parsed.channel,
+        roomName: parsed.room_name,
+        checkIn: parsed.check_in,
+        cancelled: parsed.cancelled,
+        confirmedMailAt: receivedAt ?? new Date(),
+      })
+    ) {
+      const { data: row } = await supabase
+        .from('reservations')
+        .select('notes')
+        .eq('id', data as string)
+        .single();
+      const nextNotes = appendPromoNote(row?.notes ?? null);
+      if (nextNotes !== null) {
+        const { error: noteErr } = await supabase
+          .from('reservations')
+          .update({ notes: nextNotes })
+          .eq('id', data as string);
+        if (noteErr) console.error('[promo-note]', data, noteErr.message);
+      }
+    }
+  } catch (e) {
+    console.error('[promo-note]', data, e instanceof Error ? e.message : String(e));
+  }
+
   return { status: 'parsed', reservationId: data as string };
 }
 
