@@ -23,13 +23,11 @@ describe('changedFields', () => {
   it('객실 변경', () => {
     expect(changedFields(base, { ...base, room_name: '객실 남쪽' })).toEqual(['room']);
   });
-  it('금액: null이면 변경 아님, 값 다르면 변경', () => {
-    expect(changedFields(base, { ...base, amount: null })).toEqual([]);
-    expect(changedFields(base, { ...base, amount: 120000 })).toEqual(['amount']);
+  it('금액만 다르면 빈 배열', () => {
+    expect(changedFields(base, { ...base, amount: 120000 })).toEqual([]);
   });
-  it('예약자: 전화 null이면 무시, 이름 다르면 변경', () => {
-    expect(changedFields(base, { ...base, guest_phone: null })).toEqual([]);
-    expect(changedFields(base, { ...base, guest_name: '김철수' })).toEqual(['guest']);
+  it('예약자만 다르면 빈 배열', () => {
+    expect(changedFields(base, { ...base, guest_name: '김철수' })).toEqual([]);
   });
   it('옵션: 빈 배열이면 변경 아님, 내용 다르면 변경', () => {
     expect(changedFields(base, { ...base, options: [] })).toEqual([]);
@@ -41,16 +39,17 @@ describe('changedFields', () => {
       changedFields(base, {
         ...base,
         check_in: '2026-03-20',
-        amount: 99000,
+        room_name: '객실 동쪽',
+        options: [{ name: '조식', qty: 1, price: 10000 }],
       }),
-    ).toEqual(['dates', 'amount']);
+    ).toEqual(['dates', 'room', 'options']);
   });
 });
 
 describe('changeSummaryLabel', () => {
   it('라벨 이어붙이기', () => {
     expect(changeSummaryLabel(['dates'])).toBe('날짜 변경');
-    expect(changeSummaryLabel(['dates', 'amount'])).toBe('날짜·금액 변경');
+    expect(changeSummaryLabel(['dates', 'options'])).toBe('날짜·옵션 변경');
     expect(changeSummaryLabel([])).toBe('변경 없음');
   });
 });
