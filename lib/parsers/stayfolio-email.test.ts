@@ -69,4 +69,18 @@ describe('parseStayfolioEmail', () => {
   it('체크인/체크아웃 날짜 없으면 null', () => {
     expect(parseStayfolioEmail('관련 없는 텍스트')).toBeNull();
   });
+
+  it('"요청사항이 없습니다." 는 guest_request null', () => {
+    expect(parseStayfolioEmail(SAMPLE)!.guest_request).toBeNull();
+  });
+
+  it('요청사항 내용이 있으면 그대로 담는다', () => {
+    const withReq = SAMPLE.replace(
+      '요청사항 요청사항이 없습니다.',
+      '요청사항 아기 침대 요청드립니다',
+    );
+    expect(parseStayfolioEmail(withReq)!.guest_request).toBe(
+      '아기 침대 요청드립니다',
+    );
+  });
 });

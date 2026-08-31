@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Reservation, BlockTask } from './db-types';
+import type { Reservation, BlockTask, ReservationChange } from './db-types';
 import type { Channel } from './types';
 
 // 서버 컴포넌트 초기 로드용 조회. DB 컬럼명이 Reservation/BlockTask 타입과 이미 1:1이라
@@ -116,4 +116,78 @@ export async function getLastSyncByChannel(
     if (!existing || checked > existing) result[channel] = checked;
   }
   return result;
+}
+
+interface ReservationChangeRow {
+  id: string;
+  reservation_id: string;
+  prev_check_in: string;
+  prev_check_out: string;
+  prev_room_name: string | null;
+  prev_amount: number | null;
+  prev_guest_name: string | null;
+  prev_options: ReservationChange['prev_options'];
+  new_guest_name: string | null;
+  new_guest_phone: string | null;
+  new_room_name: string | null;
+  new_check_in: string;
+  new_check_out: string;
+  new_amount: number | null;
+  new_options: ReservationChange['new_options'];
+  new_payment_method: ReservationChange['new_payment_method'];
+  new_payment_status: ReservationChange['new_payment_status'];
+  kind: ReservationChange['kind'];
+  cancel_reason: string | null;
+  cancel_source: string | null;
+  status: ReservationChange['status'];
+  created_at: string;
+  reservation: { channel: Channel; notes: string | null; guest_request: string | null } | null;
+}
+
+// 변경 확인 큐 — pending 만, 새 체크인 빠른 순.
+export async function getPendingReservationChanges(
+  supabase: SupabaseClient,
+): Promise<ReservationChange[]> {
+  const { data, error } = await supabase
+    .from('reservation_changes')
+    .select('*, reservation:reservations(channel, notes, guest_request)')
+    .eq('status', 'pending')
+    .order('new_check_in', { ascending: true });
+  if (error) {
+    // 배포 순서 슬립(마이그레이션 0023 미적용)으로 테이블이 없을 때 대시보드 전체가 500 나지 않도록.
+    // 그 외 오류는 그대로 던진다.
+    if (error.code === '42P01') {
+      console.warn('getPendingReservationChanges: reservation_changes 테이블 없음 — 빈 큐로 폴백', error.message);
+      return [];
+    }
+    throw error;
+  }
+
+  return ((data ?? []) as unknown as ReservationChangeRow[]).map((row) => ({
+    id: row.id,
+    reservation_id: row.reservation_id,
+    reservation_channel: row.reservation?.channel ?? 'naver',
+    reservation_notes: row.reservation?.notes ?? null,
+    reservation_guest_request: row.reservation?.guest_request ?? null,
+    kind: row.kind,
+    cancel_reason: row.cancel_reason ?? null,
+    cancel_source: row.cancel_source ?? null,
+    prev_check_in: row.prev_check_in,
+    prev_check_out: row.prev_check_out,
+    prev_room_name: row.prev_room_name,
+    prev_amount: row.prev_amount,
+    prev_guest_name: row.prev_guest_name,
+    prev_options: row.prev_options ?? [],
+    new_guest_name: row.new_guest_name,
+    new_guest_phone: row.new_guest_phone,
+    new_room_name: row.new_room_name,
+    new_check_in: row.new_check_in,
+    new_check_out: row.new_check_out,
+    new_amount: row.new_amount,
+    new_options: row.new_options ?? [],
+    new_payment_method: row.new_payment_method,
+    new_payment_status: row.new_payment_status,
+    status: row.status,
+    created_at: row.created_at,
+  }));
 }

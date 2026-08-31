@@ -122,3 +122,49 @@ export async function updateReservationNotes(
   revalidatePath('/');
   return { error: null };
 }
+
+// 예약 변경 확인 큐 — [기존 예약 유지]: 변경 메일 무시, 예약 원본 유지.
+export async function keepReservationChange(
+  changeId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('keep_reservation_change', {
+    p_change_id: changeId,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return { error: null };
+}
+
+// [변경 확정]: 예약을 새 값으로 교체(같은 id) + 옛 날짜 다시 열기 + 새 날짜 막기 + 재트리아지.
+export async function confirmReservationChange(
+  changeId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('confirm_reservation_change', {
+    p_change_id: changeId,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return { error: null };
+}
+
+export async function confirmCancelReview(
+  changeId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('confirm_cancel_review', { p_change_id: changeId });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return { error: null };
+}
+
+export async function confirmUncancelReview(
+  changeId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('confirm_uncancel_review', { p_change_id: changeId });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return { error: null };
+}

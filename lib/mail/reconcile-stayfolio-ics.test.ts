@@ -74,11 +74,11 @@ describe('reconcileStayfolioCancellations', () => {
     const result = await reconcileStayfolioCancellations();
 
     expect(result.checkedReservations).toBe(1);
-    expect(result.cancelledCount).toBe(0);
+    expect(result.enqueuedReviewCount).toBe(0);
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('ICS에서 사라진 예약번호는 cancel_reservation RPC로 취소한다', async () => {
+  it('ICS에서 사라진 예약번호는 enqueue_ics_cancel_review RPC로 취소 검토 큐에 등록한다', async () => {
     mockReservations = [
       { id: 'r2', channel_reservation_id: '999999999', room_name: 'page26 - 시가 내려앉는 순간' },
     ];
@@ -89,10 +89,9 @@ describe('reconcileStayfolioCancellations', () => {
 
     const result = await reconcileStayfolioCancellations();
 
-    expect(result.cancelledCount).toBe(1);
-    expect(mockRpc).toHaveBeenCalledWith('cancel_reservation', {
-      p_id: 'r2',
-      p_reason: 'stayfolio_ics_missing',
+    expect(result.enqueuedReviewCount).toBe(1);
+    expect(mockRpc).toHaveBeenCalledWith('enqueue_ics_cancel_review', {
+      p_reservation_id: 'r2',
     });
   });
 
@@ -105,7 +104,7 @@ describe('reconcileStayfolioCancellations', () => {
     const result = await reconcileStayfolioCancellations();
 
     expect(result.skippedRooms).toContain('page26');
-    expect(result.cancelledCount).toBe(0);
+    expect(result.enqueuedReviewCount).toBe(0);
     expect(mockRpc).not.toHaveBeenCalled(); // 네트워크 오류를 "전부 취소"로 오판하지 않는다
   });
 
@@ -148,7 +147,7 @@ describe('reconcileStayfolioCancellations', () => {
     const result = await reconcileStayfolioCancellations();
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result.cancelledCount).toBe(0);
+    expect(result.enqueuedReviewCount).toBe(0);
   });
 
   it('쿼리 자체가 실패하면 예외를 던진다', async () => {

@@ -19,6 +19,9 @@ export interface Reservation {
   room_name: string | null;
   check_in: string; // 'YYYY-MM-DD'
   check_out: string;
+  prev_check_in: string | null;
+  prev_check_out: string | null;
+  guest_request: string | null; // 게스트 요청사항(파서 추출)
   amount: number | null;
   options: ReservationOption[];
   payment_method: PaymentMethod;
@@ -71,3 +74,38 @@ export const STATUS_LABEL: Record<ReservationStatus, string> = {
   confirmed: '확정',
   cancelled: '취소',
 };
+
+export type ReservationChangeStatus = 'pending' | 'confirmed' | 'kept' | 'withdrawn';
+
+// reservation_changes 큐 행 + reservations 조인 몇 개(표시용).
+export interface ReservationChange {
+  id: string;
+  reservation_id: string;
+  reservation_channel: Channel;
+  reservation_notes: string | null;
+  reservation_guest_request: string | null; // 조인
+
+  kind: 'change' | 'cancel' | 'uncancel';
+  cancel_reason: string | null;
+  cancel_source: string | null;
+
+  prev_check_in: string;
+  prev_check_out: string;
+  prev_room_name: string | null;
+  prev_amount: number | null;
+  prev_guest_name: string | null;
+  prev_options: ReservationOption[];
+
+  new_guest_name: string | null;
+  new_guest_phone: string | null;
+  new_room_name: string | null;
+  new_check_in: string;
+  new_check_out: string;
+  new_amount: number | null;
+  new_options: ReservationOption[];
+  new_payment_method: PaymentMethod;
+  new_payment_status: PaymentStatus;
+
+  status: ReservationChangeStatus;
+  created_at: string;
+}

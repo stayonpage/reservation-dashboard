@@ -88,6 +88,7 @@ export function parseStayfolioSms(text: string): ParsedReservation | null {
     payment_status: status,
     // 스테이폴리오 취소 문자 포맷은 아직 실샘플 미확보 — 확보되면 감지 로직 추가.
     cancelled: /취소/.test(text.slice(0, 100)),
+    guest_request: null, // SMS 포맷엔 요청사항 항목 없음
     raw_payload: { source: 'stayfolio_sms', text },
   };
 }

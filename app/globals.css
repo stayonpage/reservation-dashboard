@@ -1117,3 +1117,26 @@ section {
   cursor: pointer;
   width: 100%;
 }
+
+/* 예약 변경 확인 큐 */
+.badge-change-request { background: var(--st-awaiting); color: #fff; }
+.badge-cancel-request { background: var(--st-cancelled); color: #fff; }
+.badge-uncancel-request { background: var(--st-new); color: #fff; }
+.guest-request { font-size: 12px; color: var(--st-new); margin-top: 4px; }
+.change-rows { margin: 8px 0; font-size: 13px; line-height: 1.7; }
+.change-tag {
+  display: inline-block; min-width: 34px; margin-right: 6px; padding: 0 6px;
+  border-radius: 4px; background: var(--border); font-size: 11px;
+}
+.change-row-new { font-weight: 600; }
+.penalty-banner { margin: 8px 0; padding: 8px 10px; border-radius: 6px; font-size: 12px; }
+.penalty-banner.ok { background: var(--st-confirmed-bg); }
+.penalty-banner.warn { background: var(--st-awaiting-bg); }
+.penalty-banner.danger { background: var(--st-cancelled-bg); }
+.penalty-banner strong { display: block; margin-bottom: 2px; }
+.btn-secondary {
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: transparent; cursor: pointer; font-size: 13px;
+}
+.prev-dates, .cal-prev-dates { color: var(--st-awaiting); font-size: 11px; }
+.cal-guest-request { font-size: 11px; color: var(--st-new); }

@@ -3,7 +3,13 @@ import type {
   ReservationOption,
   PaymentMethod,
 } from '../types';
-import { parseKoreanDate, normalizeKrPhone, firstAmount, extractLabeledFields } from './util';
+import {
+  parseKoreanDate,
+  normalizeKrPhone,
+  firstAmount,
+  extractLabeledFields,
+  normalizeGuestRequest,
+} from './util';
 
 // 스테이폴리오 예약 알림 이메일 파서(hello@stayfolio.com).
 // 스테이폴리오가 구글 캘린더 연동 서비스를 중단하고 이메일 알림으로 전환(2026-07 확인).
@@ -33,6 +39,8 @@ const LABELS = [
   '체크아웃',
   '옵션',
   '요청사항',
+  // '요청사항' 값이 다음 섹션 헤더까지 흘러넘치지 않도록 경계로만 쓰는 라벨(값은 미사용).
+  '결제정보',
   '결제금액',
   '결제방법',
   '중개수수료',
@@ -103,6 +111,7 @@ export function parseStayfolioEmail(text: string): ParsedReservation | null {
     payment_method: method,
     payment_status: cancelled ? 'none' : 'paid',
     cancelled,
+    guest_request: normalizeGuestRequest(f['요청사항']),
     raw_payload: { source: 'stayfolio_email', fields: f, guestEmail, text },
   };
 }

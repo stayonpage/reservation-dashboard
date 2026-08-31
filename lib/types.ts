@@ -32,5 +32,7 @@ export interface ParsedReservation {
   /** 취소 알림 여부 — true면 ingest 시 해당 예약을 cancelled로 전환하고 블록태스크를 skip한다.
    *  (네이버는 접수/취소를 같은 예약번호로 별도 메일 발송 — 취소를 놓치면 유령 예약이 남는다.) */
   cancelled: boolean;
+  /** 손님이 채널에 남긴 요청사항. 없으면 null. 직원 메모(notes)와 별개. */
+  guest_request: string | null;
   raw_payload: unknown; // 원문 보존(재파싱·감사)
 }

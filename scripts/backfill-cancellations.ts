@@ -45,6 +45,7 @@ async function main() {
       p_payment_status: parsed.payment_status,
       p_raw: parsed.raw_payload,
       p_cancelled: true,
+      p_guest_request: null,
     });
     if (rpcErr) {
       console.error(`ingest_log ${row.id} 백필 실패:`, rpcErr.message);

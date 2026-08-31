@@ -74,3 +74,11 @@ export function extractLabeledFields(
   }
   return out;
 }
+
+/** '요청사항' 원문 → 실제 내용만. "요청사항이 없습니다.", "-", "없음", 빈값 → null. */
+export function normalizeGuestRequest(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim();
+  if (!s) return null;
+  if (/^(-+|없음|요청사항이 없습니다\.?)$/.test(s)) return null;
+  return s;
+}

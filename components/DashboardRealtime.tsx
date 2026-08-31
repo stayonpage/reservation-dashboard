@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { createClient } from '../lib/supabase/client';
-import type { Reservation, BlockTask } from '../lib/db-types';
+import type { Reservation, BlockTask, ReservationChange } from '../lib/db-types';
 import { DepositQueue } from './DepositQueue';
 import { BlockWorklist } from './BlockWorklist';
 import { ReservationList } from './ReservationList';
+import { ReservationChangeQueue } from './ReservationChangeQueue';
 import { RoomCalendar } from './RoomCalendar';
 import { WeeklyOverview } from './WeeklyOverview';
 import { Statistics } from './Statistics';
@@ -19,6 +20,10 @@ import {
   cancelReservation,
   updateReservationNotes,
   createManualReservation,
+  keepReservationChange,
+  confirmReservationChange,
+  confirmCancelReview,
+  confirmUncancelReview,
 } from '../lib/actions';
 import type { Channel, PaymentStatus, ReservationOption } from '../lib/types';
 
@@ -37,13 +42,23 @@ function upsertById<T extends { id: string }>(list: T[], row: T): T[] {
 export function DashboardRealtime({
   initialReservations,
   initialBlockTasks,
+  initialChanges,
 }: {
   initialReservations: Reservation[];
   initialBlockTasks: BlockTask[];
+  initialChanges: ReservationChange[];
 }) {
   const [reservations, setReservations] = useState(initialReservations);
   const [blockTasks, setBlockTasks] = useState(initialBlockTasks);
+  const [changes, setChanges] = useState(initialChanges);
   const [, startTransition] = useTransition();
+
+  // realtime 핸들러가 최신 reservations 를 참조하되, 구독 useEffect 의 deps 는 [] 로 유지
+  // (reservations 를 deps 에 넣으면 예약이 바뀔 때마다 재구독됨).
+  const reservationsRef = useRef(reservations);
+  useEffect(() => {
+    reservationsRef.current = reservations;
+  }, [reservations]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -98,6 +113,55 @@ export function DashboardRealtime({
             }
           },
         )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'reservation_changes' },
+          (payload) => {
+            if (payload.eventType === 'DELETE') {
+              const oldId = (payload.old as { id: string }).id;
+              setChanges((prev) => prev.filter((c) => c.id !== oldId));
+              return;
+            }
+            const incoming = payload.new as Partial<ReservationChange> & {
+              id: string;
+              status: ReservationChange['status'];
+              reservation_id: string;
+            };
+            // pending 이 아니게 되면(확정/유지/철회) 목록에서 제거.
+            if (incoming.status !== 'pending') {
+              setChanges((prev) => prev.filter((c) => c.id !== incoming.id));
+              return;
+            }
+            // 원본 페이로드엔 reservations 조인이 없음 — 채널/notes 는 현재 예약 state 에서 보강.
+            setChanges((prev) => {
+              const res = reservationsRef.current.find(
+                (r) => r.id === incoming.reservation_id,
+              );
+              const existing = prev.find((c) => c.id === incoming.id);
+              const merged = {
+                reservation_channel:
+                  res?.channel ?? existing?.reservation_channel ?? 'naver',
+                reservation_notes: res?.notes ?? existing?.reservation_notes ?? null,
+                reservation_guest_request:
+                  res?.guest_request ??
+                  existing?.reservation_guest_request ??
+                  null,
+                kind: 'change' as const,
+                cancel_reason: null,
+                cancel_source: null,
+                prev_options: [],
+                new_options: [],
+                ...existing,
+                ...incoming,
+              } as ReservationChange;
+              const idx = prev.findIndex((c) => c.id === merged.id);
+              if (idx === -1) return [merged, ...prev];
+              const copy = [...prev];
+              copy[idx] = merged;
+              return copy;
+            });
+          },
+        )
         // 무음 실패 방지: 구독이 실패/타임아웃해도 조용히 넘어가지 않고 콘솔에 남긴다.
         .subscribe((status, err) => {
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -143,6 +207,41 @@ export function DashboardRealtime({
       });
     });
   };
+
+  // 낙관적 제거: 이 두 버튼은 카드(=조작 수단) 자체를 없애므로, 서버 액션이 실패하면
+  // 되돌려 놓고 눈에 보이게 알린다(그냥 두면 새로고침 전까지 카드가 사라진 채로 남음).
+  const resolveChange = (
+    changeId: string,
+    action: (id: string) => Promise<{ error: string | null }>,
+    failMsg: string,
+  ) => {
+    const removed = changes.find((c) => c.id === changeId);
+    setChanges((prev) => prev.filter((c) => c.id !== changeId));
+    startTransition(() => {
+      action(changeId).then((res) => {
+        if (!res.error) return;
+        console.error(failMsg, res.error);
+        if (removed) {
+          setChanges((prev) =>
+            prev.some((c) => c.id === changeId) ? prev : [removed, ...prev],
+          );
+        }
+        if (typeof window !== 'undefined') window.alert(failMsg);
+      });
+    });
+  };
+
+  const handleKeepChange = (changeId: string) =>
+    resolveChange(changeId, keepReservationChange, '기존 예약 유지 처리에 실패했습니다. 다시 시도해 주세요.');
+
+  const handleConfirmChange = (changeId: string) =>
+    resolveChange(changeId, confirmReservationChange, '변경 확정에 실패했습니다. 다시 시도해 주세요.');
+
+  const handleCancelConfirm = (id: string) =>
+    resolveChange(id, confirmCancelReview, '취소 확정에 실패했습니다. 다시 시도해 주세요.');
+
+  const handleUncancelConfirm = (id: string) =>
+    resolveChange(id, confirmUncancelReview, '예약 되살리기에 실패했습니다. 다시 시도해 주세요.');
 
   const handleCreateManualBlock = (
     roomCode: string,
@@ -212,6 +311,24 @@ export function DashboardRealtime({
 
   const depositCount = reservations.filter((r) => r.status === 'awaiting_deposit').length;
   const blockCount = blockTasks.filter((t) => t.status === 'pending').length;
+  const changeCount = changes.filter((c) => c.status === 'pending').length;
+  const pendingByKind = {
+    change: new Set(
+      changes
+        .filter((c) => c.status === 'pending' && c.kind === 'change')
+        .map((c) => c.reservation_id),
+    ),
+    cancel: new Set(
+      changes
+        .filter((c) => c.status === 'pending' && c.kind === 'cancel')
+        .map((c) => c.reservation_id),
+    ),
+    uncancel: new Set(
+      changes
+        .filter((c) => c.status === 'pending' && c.kind === 'uncancel')
+        .map((c) => c.reservation_id),
+    ),
+  };
 
   return (
     <>
@@ -220,6 +337,12 @@ export function DashboardRealtime({
         onCancelReservation={handleCancelReservation}
       />
       <nav className="quick-nav">
+        <a href="#changes">
+          예약확인
+          <span className={`n-count ${changeCount === 0 ? 'zero' : ''}`}>
+            {changeCount}
+          </span>
+        </a>
         <a href="#deposit">
           입금확인
           <span className={`n-count ${depositCount === 0 ? 'zero' : ''}`}>
@@ -241,6 +364,14 @@ export function DashboardRealtime({
         <a href="#stats">통계</a>
       </nav>
 
+      <ReservationChangeQueue
+        id="changes"
+        changes={changes}
+        onKeep={handleKeepChange}
+        onConfirm={handleConfirmChange}
+        onCancelConfirm={handleCancelConfirm}
+        onUncancelConfirm={handleUncancelConfirm}
+      />
       <DepositQueue id="deposit" reservations={reservations} onConfirm={handleConfirmDeposit} />
       <BlockWorklist id="block" tasks={blockTasks} onToggle={handleToggleBlock} />
       <RoomCalendar
@@ -254,7 +385,12 @@ export function DashboardRealtime({
       />
       <WeeklyOverview id="week" reservations={reservations} />
       <ManualReservationForm reservations={reservations} onSubmit={handleCreateManualReservation} />
-      <ReservationList id="list" reservations={reservations} blockTasks={blockTasks} />
+      <ReservationList
+        id="list"
+        reservations={reservations}
+        blockTasks={blockTasks}
+        pendingByKind={pendingByKind}
+      />
       <Statistics id="stats" reservations={reservations} />
     </>
   );

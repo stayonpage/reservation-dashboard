@@ -1,5 +1,5 @@
 import type { ParsedReservation, ReservationOption, PaymentMethod } from '../types';
-import { parseTwoDates, extractLabeledFields } from './util';
+import { parseTwoDates, extractLabeledFields, normalizeGuestRequest } from './util';
 
 // 네이버 예약(플레이스) 알림 메일 파서.
 //
@@ -139,6 +139,7 @@ export function parseNaverEmail(text: string): ParsedReservation | null {
     payment_method: method,
     payment_status,
     cancelled,
+    guest_request: normalizeGuestRequest(f['요청사항']),
     raw_payload: { source: 'naver_email', fields: f, text },
   };
 }
