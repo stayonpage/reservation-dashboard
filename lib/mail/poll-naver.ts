@@ -53,6 +53,11 @@ export async function pollNaverInbox(): Promise<PollResult> {
     const searchResult = await client.search({ seen: false }, { uid: true });
     const uids = searchResult === false ? [] : searchResult;
 
+    // 불변식: IMAP search 는 UID 오름차순 = 메일 도착순으로 반환한다. 이 루프도 그 순서를
+    // 유지하므로 한 예약의 "접수 → 변경 → 취소" 메일이 도착 순서대로 ingest_reservation 에
+    // 전달된다. 예약 확인 큐(reservation_changes) 로직은 이 순서에 의존한다 —
+    // 예: 취소 메일이 접수 메일보다 먼저 처리되면 kind='cancel' 이 아니라 신규 취소로 잘못 들어감.
+    // 순서를 바꾸거나 병렬 처리하려면 큐 분기(0023 §4 B/C)를 먼저 재검토할 것.
     for (const uid of uids) {
       result.checked++;
       try {
