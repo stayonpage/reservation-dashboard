@@ -311,5 +311,52 @@ select 'K1: confirm_reservation_change 는 cancel 큐에 무반응(pending 유�
 select 'K1: 예약 여전히 활성?' as check, status <> 'cancelled'
   from reservations where channel_reservation_id='K1';
 
+-- 20) confirm_cancel_review: done/block → pending/unblock, pending/block → skipped, 예약 cancelled
+select _t_ing('CC1', date '2027-05-10', date '2027-05-11');            -- 신규(naver → imweb+stayfolio block pending)
+update block_tasks set status='done', action='block'
+ where reservation_id=(select id from reservations where channel_reservation_id='CC1')
+   and target_channel='imweb';
+select _t_ing('CC1', date '2027-05-10', date '2027-05-11', cancelled => true);   -- kind=cancel pending
+select confirm_cancel_review(
+  (select rc.id from reservation_changes rc join reservations r on r.id=rc.reservation_id
+    where r.channel_reservation_id='CC1' and rc.status='pending' and rc.kind='cancel'));
+select 'CC1: imweb done/block → pending/unblock?' as check, count(*)=1 from block_tasks
+  where reservation_id=(select id from reservations where channel_reservation_id='CC1')
+    and target_channel='imweb' and action='unblock' and status='pending';
+select 'CC1: pending/block 태스크 → skipped(0 남음)?' as check, count(*)=0 from block_tasks
+  where reservation_id=(select id from reservations where channel_reservation_id='CC1')
+    and status='pending' and action='block';
+select 'CC1: 예약 status=cancelled?' as check, status='cancelled'
+  from reservations where channel_reservation_id='CC1';
+
+-- 21) change_ignored_cancel_pending: cancel 대기 중 날짜변경 메일 → 변경분 버림, note만 남고 pending 그대로
+select _t_ing('CG1', date '2027-06-10', date '2027-06-11');            -- 신규
+select _t_ing('CG1', date '2027-06-10', date '2027-06-11', cancelled => true);   -- kind=cancel pending
+select _t_ing('CG1', date '2027-06-20', date '2027-06-21');            -- 날짜변경 메일(cancelled=false, 다른 check_in)
+select 'CG1: pending 행 여전히 kind=cancel(갈아끼움/2번째행 없음)?' as check, count(*)=1
+  from reservation_changes rc join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='CG1' and rc.status='pending' and rc.kind='cancel';
+select 'CG1: 예약 pending 개수=1?' as check, count(*)=1 from reservation_changes rc
+  join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='CG1' and rc.status='pending';
+select 'CG1: change_ignored_cancel_pending note 이벤트 존재?' as check, count(*)>=1
+  from reservation_events ev join reservations r on r.id=ev.reservation_id
+  where r.channel_reservation_id='CG1' and ev.type='note'
+    and ev.detail->>'source'='change_ignored_cancel_pending';
+
+-- 22) cancel_reason 추출: p_raw.fields.취소사유 → reservation_changes.cancel_reason (직접 ingest_reservation 호출)
+select _t_ing('CR1', date '2027-07-10', date '2027-07-11');            -- 신규(active) — 이미 존재하는 예약
+select ingest_reservation('naver'::channel, 'CR1', '홍길동', '010-1', 'page26',
+  date '2027-07-10', date '2027-07-11', 150000, '[]'::jsonb, 'cash'::payment_method,
+  'pending'::payment_status,
+  jsonb_build_object('fields', jsonb_build_object('취소사유','고객 변심')), true, null);
+select 'CR1: cancel 큐 pending 1건 kind=cancel?' as check, count(*)=1 from reservation_changes rc
+  join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='CR1' and rc.status='pending' and rc.kind='cancel';
+select 'CR1: cancel_reason=고객 변심?' as check,
+  bool_and(rc.cancel_reason='고객 변심') from reservation_changes rc
+  join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='CR1' and rc.status='pending' and rc.kind='cancel';
+
 drop function _t_ing(text,date,date,int,text,bool,text,jsonb,text);
 rollback;

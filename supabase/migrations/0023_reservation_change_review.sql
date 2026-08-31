@@ -169,7 +169,8 @@ begin
      set raw_payload    = p_raw,
          payment_method = p_payment_method,
          payment_status = p_payment_status,
-         guest_request  = p_guest_request
+         -- 요청사항 없는 재수신(취소통지·ICS재동기화 등)이 기존 값을 지우지 않도록 coalesce
+         guest_request  = coalesce(p_guest_request, guest_request)
    where id = v_id;
 
   select kind into v_pending_kind
@@ -540,7 +541,8 @@ begin
     r.check_in, r.check_out, r.room_name, r.amount, r.guest_name, coalesce(r.options,'[]'::jsonb),
     r.guest_name, r.guest_phone, r.room_name, r.check_in, r.check_out,
     r.amount, coalesce(r.options,'[]'::jsonb), r.payment_method, r.payment_status, r.raw_payload
-  );
+  )
+  on conflict (reservation_id) where status = 'pending' do nothing;
   insert into reservation_events (reservation_id, actor, type, detail)
     values (p_reservation_id, null, 'note',
             jsonb_build_object('source','cancel_review_queued','cancel_source','stayfolio_ics_missing'));
