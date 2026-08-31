@@ -2,6 +2,18 @@
 
 작성 2026-08-31. 이 문서만 읽으면 이어서 진행 가능.
 
+## 업데이트 2026-08-31 (2차 세션)
+
+- **1~2단계 DB 검증 통과.** Supabase 브랜칭이 Pro 전용이라, `scripts/verify-0023-standalone.sql`
+  (0023 전체 + 시나리오 22개를 하나의 `begin … rollback` DO 블록으로 감싼 자동생성본)을
+  운영 프로젝트 SQL Editor 에서 실행 → `ALL 67 CHECKS PASSED — 0023 OK`. 전부 롤백돼 운영 스키마 무변경.
+  → 0023 이 클린 적용되고 RPC 시나리오 assert 67개 전부 통과함을 확인.
+- 로컬 게이트 재확인: `TZ=UTC npx vitest run` 135/135 · `tsc --noEmit` 0 · `npm run build` OK.
+- **남은 것: 4단계(앱 스모크) + 5단계(배포).** 5단계 순서 반드시 지킬 것 — 0023 **실제 커밋 적용**을
+  앱 배포/머지보다 먼저.
+- SQL Editor 팁: 멀티스테이트먼트 실행 시 **마지막 SELECT 결과만** 보임. 여러 assert 는 DO 블록+raise 로
+  모아야 함. `create temp table … on commit drop` 은 에디터가 문장 사이에서 드롭시킴 → `on commit drop` 빼기.
+
 ## 현재 상태
 
 - **브랜치:** `feat/reservation-change-review` @ `3bf9313` (merge-base `a7c90a1` 기준 29 커밋)
