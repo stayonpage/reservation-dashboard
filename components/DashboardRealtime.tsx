@@ -22,6 +22,8 @@ import {
   createManualReservation,
   keepReservationChange,
   confirmReservationChange,
+  confirmCancelReview,
+  confirmUncancelReview,
 } from '../lib/actions';
 import type { Channel, PaymentStatus, ReservationOption } from '../lib/types';
 
@@ -140,6 +142,13 @@ export function DashboardRealtime({
                 reservation_channel:
                   res?.channel ?? existing?.reservation_channel ?? 'naver',
                 reservation_notes: res?.notes ?? existing?.reservation_notes ?? null,
+                reservation_guest_request:
+                  res?.guest_request ??
+                  existing?.reservation_guest_request ??
+                  null,
+                kind: 'change' as const,
+                cancel_reason: null,
+                cancel_source: null,
                 prev_options: [],
                 new_options: [],
                 ...existing,
@@ -228,6 +237,12 @@ export function DashboardRealtime({
   const handleConfirmChange = (changeId: string) =>
     resolveChange(changeId, confirmReservationChange, '변경 확정에 실패했습니다. 다시 시도해 주세요.');
 
+  const handleCancelConfirm = (id: string) =>
+    resolveChange(id, confirmCancelReview, '취소 확정에 실패했습니다. 다시 시도해 주세요.');
+
+  const handleUncancelConfirm = (id: string) =>
+    resolveChange(id, confirmUncancelReview, '예약 되살리기에 실패했습니다. 다시 시도해 주세요.');
+
   const handleCreateManualBlock = (
     roomCode: string,
     checkIn: string,
@@ -297,9 +312,23 @@ export function DashboardRealtime({
   const depositCount = reservations.filter((r) => r.status === 'awaiting_deposit').length;
   const blockCount = blockTasks.filter((t) => t.status === 'pending').length;
   const changeCount = changes.filter((c) => c.status === 'pending').length;
-  const pendingChangeReservationIds = new Set(
-    changes.filter((c) => c.status === 'pending').map((c) => c.reservation_id),
-  );
+  const pendingByKind = {
+    change: new Set(
+      changes
+        .filter((c) => c.status === 'pending' && c.kind === 'change')
+        .map((c) => c.reservation_id),
+    ),
+    cancel: new Set(
+      changes
+        .filter((c) => c.status === 'pending' && c.kind === 'cancel')
+        .map((c) => c.reservation_id),
+    ),
+    uncancel: new Set(
+      changes
+        .filter((c) => c.status === 'pending' && c.kind === 'uncancel')
+        .map((c) => c.reservation_id),
+    ),
+  };
 
   return (
     <>
@@ -309,7 +338,7 @@ export function DashboardRealtime({
       />
       <nav className="quick-nav">
         <a href="#changes">
-          변경확인
+          예약확인
           <span className={`n-count ${changeCount === 0 ? 'zero' : ''}`}>
             {changeCount}
           </span>
@@ -340,6 +369,8 @@ export function DashboardRealtime({
         changes={changes}
         onKeep={handleKeepChange}
         onConfirm={handleConfirmChange}
+        onCancelConfirm={handleCancelConfirm}
+        onUncancelConfirm={handleUncancelConfirm}
       />
       <DepositQueue id="deposit" reservations={reservations} onConfirm={handleConfirmDeposit} />
       <BlockWorklist id="block" tasks={blockTasks} onToggle={handleToggleBlock} />
@@ -358,7 +389,7 @@ export function DashboardRealtime({
         id="list"
         reservations={reservations}
         blockTasks={blockTasks}
-        pendingChangeReservationIds={pendingChangeReservationIds}
+        pendingByKind={pendingByKind}
       />
       <Statistics id="stats" reservations={reservations} />
     </>
