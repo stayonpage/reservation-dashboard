@@ -23,7 +23,7 @@ import { kstTodayISO } from '../format';
 export interface ReconcileResult {
   checkedRooms: number;
   checkedReservations: number;
-  cancelledCount: number;
+  enqueuedReviewCount: number; // 즉시취소 대신 "취소 검토 큐"에 등록한 건수(v2)
   skippedRooms: string[]; // ICS 조회 실패 등으로 대사를 건너뛴 방(안전 폴백)
   errors: string[];
 }
@@ -57,7 +57,7 @@ export async function reconcileStayfolioCancellations(): Promise<ReconcileResult
   const result: ReconcileResult = {
     checkedRooms: 0,
     checkedReservations: 0,
-    cancelledCount: 0,
+    enqueuedReviewCount: 0,
     skippedRooms: [],
     errors: [],
   };
@@ -101,14 +101,15 @@ export async function reconcileStayfolioCancellations(): Promise<ReconcileResult
         result.checkedReservations++;
         if (currentIds.has(r.channel_reservation_id)) continue;
 
-        const { error: cancelErr } = await supabase.rpc('cancel_reservation', {
-          p_id: r.id,
-          p_reason: 'stayfolio_ics_missing',
+        // v2: 즉시 취소하지 않고 "취소 검토 큐"에 등록한다(2026-07-25 / 2026-08-29 오취소
+        // 실사고 재발 방지 — 사라짐 감지는 운영자 확인을 거친 뒤에만 실제 취소로 이어진다).
+        const { error: enqueueErr } = await supabase.rpc('enqueue_ics_cancel_review', {
+          p_reservation_id: r.id,
         });
-        if (cancelErr) {
-          result.errors.push(`${r.id}: ${cancelErr.message}`);
+        if (enqueueErr) {
+          result.errors.push(`${r.id}: ${enqueueErr.message}`);
         } else {
-          result.cancelledCount++;
+          result.enqueuedReviewCount++;
         }
       }
     } catch (e) {

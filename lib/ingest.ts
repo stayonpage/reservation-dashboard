@@ -70,6 +70,7 @@ export async function handleIncoming(args: {
     p_payment_status: parsed.payment_status,
     p_raw: parsed.raw_payload,
     p_cancelled: parsed.cancelled,
+    p_guest_request: parsed.guest_request,
   });
   if (error) {
     await markLog({ status: 'parse_failed', error: error.message });
