@@ -279,6 +279,11 @@ export function RoomCalendar({
                             {formatDateShort(reservation.prev_check_out)}
                           </span>
                         )}
+                        {reservation.guest_request && (
+                          <span className="cal-guest-request">
+                            손님 요청: {reservation.guest_request}
+                          </span>
+                        )}
                         <button
                           type="button"
                           className="cal-notes-btn"

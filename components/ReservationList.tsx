@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import type { Reservation, BlockTask } from '../lib/db-types';
-import { ChannelBadge, StatusBadge, ChangeRequestBadge } from './Badges';
+import {
+  ChannelBadge,
+  StatusBadge,
+  ChangeRequestBadge,
+  CancelRequestBadge,
+  UncancelRequestBadge,
+} from './Badges';
 import { formatWon, formatDateRange, timeAgo, formatOptions, formatDateShort } from '../lib/format';
 import { displayRoomName } from '../lib/rooms';
 import type { ReservationStatus } from '../lib/types';
@@ -23,12 +29,12 @@ const TABS: { key: ReservationStatus | 'all'; label: string }[] = [
 export function ReservationList({
   reservations,
   blockTasks,
-  pendingChangeReservationIds,
+  pendingByKind,
   id,
 }: {
   reservations: Reservation[];
   blockTasks: BlockTask[];
-  pendingChangeReservationIds: Set<string>;
+  pendingByKind: { change: Set<string>; cancel: Set<string>; uncancel: Set<string> };
   id?: string;
 }) {
   const [tab, setTab] = useState<ReservationStatus | 'all'>('all');
@@ -99,6 +105,12 @@ export function ReservationList({
                         </span>
                       </>
                     )}
+                    {r.guest_request && (
+                      <>
+                        <br />
+                        <span className="guest-request">손님 요청: {r.guest_request}</span>
+                      </>
+                    )}
                     {r.options.length > 0 && (
                       <>
                         <br />
@@ -112,7 +124,9 @@ export function ReservationList({
               <div className="badge-row">
                 <ChannelBadge channel={r.channel} />
                 <StatusBadge status={r.status} />
-                {pendingChangeReservationIds.has(r.id) && <ChangeRequestBadge />}
+                {pendingByKind.change.has(r.id) && <ChangeRequestBadge />}
+                {pendingByKind.cancel.has(r.id) && <CancelRequestBadge />}
+                {pendingByKind.uncancel.has(r.id) && <UncancelRequestBadge />}
               </div>
             </div>
           );

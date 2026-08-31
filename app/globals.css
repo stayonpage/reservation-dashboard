@@ -1139,3 +1139,4 @@ section {
   background: transparent; cursor: pointer; font-size: 13px;
 }
 .prev-dates, .cal-prev-dates { color: var(--st-awaiting); font-size: 11px; }
+.cal-guest-request { font-size: 11px; color: var(--st-new); }
