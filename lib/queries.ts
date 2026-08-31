@@ -136,9 +136,12 @@ interface ReservationChangeRow {
   new_options: ReservationChange['new_options'];
   new_payment_method: ReservationChange['new_payment_method'];
   new_payment_status: ReservationChange['new_payment_status'];
+  kind: ReservationChange['kind'];
+  cancel_reason: string | null;
+  cancel_source: string | null;
   status: ReservationChange['status'];
   created_at: string;
-  reservation: { channel: Channel; notes: string | null } | null;
+  reservation: { channel: Channel; notes: string | null; guest_request: string | null } | null;
 }
 
 // 변경 확인 큐 — pending 만, 새 체크인 빠른 순.
@@ -147,7 +150,7 @@ export async function getPendingReservationChanges(
 ): Promise<ReservationChange[]> {
   const { data, error } = await supabase
     .from('reservation_changes')
-    .select('*, reservation:reservations(channel, notes)')
+    .select('*, reservation:reservations(channel, notes, guest_request)')
     .eq('status', 'pending')
     .order('new_check_in', { ascending: true });
   if (error) throw error;
@@ -157,6 +160,10 @@ export async function getPendingReservationChanges(
     reservation_id: row.reservation_id,
     reservation_channel: row.reservation?.channel ?? 'naver',
     reservation_notes: row.reservation?.notes ?? null,
+    reservation_guest_request: row.reservation?.guest_request ?? null,
+    kind: row.kind,
+    cancel_reason: row.cancel_reason ?? null,
+    cancel_source: row.cancel_source ?? null,
     prev_check_in: row.prev_check_in,
     prev_check_out: row.prev_check_out,
     prev_room_name: row.prev_room_name,

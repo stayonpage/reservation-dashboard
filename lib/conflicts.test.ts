@@ -14,6 +14,7 @@ function makeReservation(overrides: Partial<Reservation>): Reservation {
     check_out: '2026-07-26',
     prev_check_in: null,
     prev_check_out: null,
+    guest_request: null,
     amount: 100000,
     options: [],
     payment_method: 'unknown',

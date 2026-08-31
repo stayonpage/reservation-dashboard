@@ -21,6 +21,7 @@ export interface Reservation {
   check_out: string;
   prev_check_in: string | null;
   prev_check_out: string | null;
+  guest_request: string | null; // 게스트 요청사항(파서 추출)
   amount: number | null;
   options: ReservationOption[];
   payment_method: PaymentMethod;
@@ -82,6 +83,11 @@ export interface ReservationChange {
   reservation_id: string;
   reservation_channel: Channel;
   reservation_notes: string | null;
+  reservation_guest_request: string | null; // 조인
+
+  kind: 'change' | 'cancel' | 'uncancel';
+  cancel_reason: string | null;
+  cancel_source: string | null;
 
   prev_check_in: string;
   prev_check_out: string;
