@@ -8,7 +8,7 @@ import {
 } from '../lib/queries';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import type { Channel } from '../lib/types';
-import { isStale, timeAgo } from '../lib/format';
+import { isStale, timeAgo, kstTodayISO } from '../lib/format';
 import { DashboardRealtime } from '../components/DashboardRealtime';
 import { signOut } from './login/actions';
 
@@ -45,6 +45,9 @@ export default async function DashboardPage() {
   ]);
 
   const now = new Date();
+  // "오늘"은 서버에서 한 번만 확정 — 클라이언트가 각자 new Date() 하면 KST 자정 근처에
+  // SSR/hydration 이 갈려 위약금 안내(D-day)가 순간 불일치한다.
+  const todayISO = kstTodayISO();
 
   return (
     <main>
@@ -93,6 +96,7 @@ export default async function DashboardPage() {
         initialReservations={reservations}
         initialBlockTasks={blockTasks}
         initialChanges={pendingChanges}
+        todayISO={todayISO}
       />
     </main>
   );

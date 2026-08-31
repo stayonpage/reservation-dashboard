@@ -358,5 +358,73 @@ select 'CR1: cancel_reason=고객 변심?' as check,
   join reservations r on r.id=rc.reservation_id
   where r.channel_reservation_id='CR1' and rc.status='pending' and rc.kind='cancel';
 
+-- ══ 커버 공백 보강 (2026-08-31, 미룬 Minor #4) ═══════════════════
+
+-- 23) confirm_uncancel_review 게스트하우스 stayfolio 제외 (§8 재생성 경로)
+select _t_ing('GU1', date '2027-08-01', date '2027-08-02', room => '객실 서쪽 201');
+select _t_ing('GU1', date '2027-08-01', date '2027-08-02', room => '객실 서쪽 201', cancelled => true);
+select confirm_cancel_review(
+  (select rc.id from reservation_changes rc join reservations r on r.id=rc.reservation_id
+    where r.channel_reservation_id='GU1' and rc.status='pending' and rc.kind='cancel'));
+select _t_ing('GU1', date '2027-08-10', date '2027-08-11', room => '객실 서쪽 201');   -- uncancel 큐
+select confirm_uncancel_review(
+  (select rc.id from reservation_changes rc join reservations r on r.id=rc.reservation_id
+    where r.channel_reservation_id='GU1' and rc.status='pending' and rc.kind='uncancel'));
+select 'GU1 uncancel gh: stayfolio block 없음?' as check, count(*)=0 from block_tasks
+  where reservation_id=(select id from reservations where channel_reservation_id='GU1')
+    and target_channel='stayfolio' and action='block';
+select 'GU1 uncancel gh: imweb 새 날짜 block pending(8/10)?' as check, count(*)>=1 from block_tasks
+  where reservation_id=(select id from reservations where channel_reservation_id='GU1')
+    and target_channel='imweb' and action='block' and status='pending' and check_in=date '2027-08-10';
+
+-- 24) confirm_reservation_change: deposit_confirmed_* / confirmed_* 클리어 (§6a)
+select _t_ing('DC1', date '2027-09-01', date '2027-09-02');
+update reservations set deposit_confirmed_at = now(), confirmed_at = now()
+ where channel_reservation_id='DC1';
+select _t_ing('DC1', date '2027-09-10', date '2027-09-11');   -- change → pending
+select confirm_reservation_change(
+  (select rc.id from reservation_changes rc join reservations r on r.id=rc.reservation_id
+    where r.channel_reservation_id='DC1' and rc.status='pending'));
+select 'DC1 confirm: deposit_confirmed_at / confirmed_at 클리어?' as check,
+  bool_and(deposit_confirmed_at is null and confirmed_at is null)
+  from reservations where channel_reservation_id='DC1';
+
+-- 25) uncancel 큐 upsert 재전송 — 취소 예약에 정상 메일 2번(다른 날짜) → 같은 pending 행 갱신
+select _t_ing('UR1', date '2027-10-01', date '2027-10-02');
+select _t_ing('UR1', date '2027-10-01', date '2027-10-02', cancelled => true);
+select confirm_cancel_review(
+  (select rc.id from reservation_changes rc join reservations r on r.id=rc.reservation_id
+    where r.channel_reservation_id='UR1' and rc.status='pending' and rc.kind='cancel'));
+select _t_ing('UR1', date '2027-10-10', date '2027-10-11');   -- uncancel 큐 생성
+select _t_ing('UR1', date '2027-10-20', date '2027-10-21');   -- 같은 pending 행 upsert
+select 'UR1 uncancel re-send: pending 1건(kind=uncancel) 유지?' as check, count(*)=1
+  from reservation_changes rc join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='UR1' and rc.status='pending' and rc.kind='uncancel';
+select 'UR1 uncancel re-send: new_check_in 최신 10/20?' as check,
+  bool_and(rc.new_check_in=date '2027-10-20') from reservation_changes rc
+  join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='UR1' and rc.status='pending';
+
+-- 26) wrong-kind no-op — confirm_cancel_review / confirm_uncancel_review
+select _t_ing('WK1', date '2027-11-01', date '2027-11-02');
+select _t_ing('WK1', date '2027-11-10', date '2027-11-11');   -- change 큐
+select confirm_cancel_review(
+  (select rc.id from reservation_changes rc join reservations r on r.id=rc.reservation_id
+    where r.channel_reservation_id='WK1' and rc.status='pending'));
+select 'WK1: confirm_cancel_review 는 change 큐에 무반응(pending 유지)?' as check, count(*)=1
+  from reservation_changes rc join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='WK1' and rc.status='pending' and rc.kind='change';
+
+select _t_ing('WK2', date '2027-12-01', date '2027-12-02');
+select _t_ing('WK2', date '2027-12-01', date '2027-12-02', cancelled => true);   -- cancel 큐
+select confirm_uncancel_review(
+  (select rc.id from reservation_changes rc join reservations r on r.id=rc.reservation_id
+    where r.channel_reservation_id='WK2' and rc.status='pending'));
+select 'WK2: confirm_uncancel_review 는 cancel 큐에 무반응(pending 유지)?' as check, count(*)=1
+  from reservation_changes rc join reservations r on r.id=rc.reservation_id
+  where r.channel_reservation_id='WK2' and rc.status='pending' and rc.kind='cancel';
+select 'WK2: 예약 여전히 활성?' as check, status <> 'cancelled'
+  from reservations where channel_reservation_id='WK2';
+
 drop function _t_ing(text,date,date,int,text,bool,text,jsonb,text);
 rollback;
