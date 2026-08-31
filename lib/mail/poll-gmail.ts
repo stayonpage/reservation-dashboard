@@ -85,6 +85,7 @@ export async function pollGmailStayfolioInbox(): Promise<PollResult> {
           externalId,
           raw: text,
           parse: parseStayfolioEmailWithRealId,
+          receivedAt: parsedMail.date,
         });
 
         if (outcome.status === 'parsed') result.parsed++;
