@@ -421,3 +421,30 @@ v1 §5.2 "값 원복 → withdrawn" 을 kind 별로 확장:
 - 실제 환불/PG 연동 없음 — 위약금은 표시만.
 - 달력의 수동 취소 토글(`staff_cancel_reservation`)은 즉시 취소 유지(직원이 직접 누른 것이라 확인 게이트 불필요).
 - `amount` 변경 자체는 큐 트리거 아님(스냅샷만 갱신).
+
+## V2-10. 배포 순서 (구현 완료 후 — feat/reservation-change-review)
+
+구현·리뷰 완료 상태(2026-08-31). 로컬 게이트 전부 통과: `TZ=UTC vitest` 135/135,
+`tsc --noEmit` 0, `npm run build` 성공. **DB는 이 환경에서 실행 불가라 미검증** — 아래 1~3 필수.
+
+1. **마이그레이션 `0023` 을 비운영 Supabase 에 적용** (SQL Editor 에 전체 붙여넣기).
+   - 참고: `0023` 은 v1·v2 를 한 파일에 합쳐 재작성됨. 어느 DB에도 적용된 적 없음.
+2. **`scripts/verify-0023.sql` 실행 → `check` 컬럼 전부 `t`** (시나리오 1~22). `f` 나오면 중단.
+3. `select conname from pg_constraint where conrelid='block_tasks'::regclass;`
+   → `block_tasks_reservation_id_target_channel_key` **없어야**, `block_tasks_manual_or_reservation` **남아야**.
+4. 직원 세션으로 브라우저 실전 검증 각 1회(동시클릭 포함):
+   `변경 확정` / `취소 확정` / `예약 되살리기` / `기존 예약 유지`.
+   - `취소 확정` 후 "막아야 할 채널"에 옛 날짜 "다시 열기" 뜨는지
+   - `변경 확정` 후 새 날짜 "막아라" 뜨는지
+   - 대시보드 콘솔 에러 없는지
+5. **마이그레이션 먼저, 그다음 앱 배포.** (순서 바뀌면 `getPendingReservationChanges` 가 없는
+   테이블 조회 → 대시보드 전체 500.)
+6. 위 전부 통과 후 `feat/reservation-change-review` → `main` 머지.
+
+### 리뷰에서 남긴 Minor (머지 전 재량 판단 — `.superpowers/sdd/progress.md` 참조)
+- `ingest_reservation`: change→cancel 플립 시 `new_*` 가 옛 변경값 유지(카드 표시엔 무해, 내부 불일치)
+- `confirm_cancel_review`/`confirm_uncancel_review` claim UPDATE 에 `and kind=…` 가드 없음(현재는 안전)
+- `enqueue_ics_cancel_review` 레이스 패자도 `note` 이벤트 1건 남김
+- `verify-0023.sql` 커버 공백: 게스트하우스 제외(uncancel/change 재생성), `deposit_confirmed_*` 클리어 미검증
+- `ReconcileResult` JSON 키 `cancelledCount` → `enqueuedReviewCount` (GH Actions 는 HTTP 상태만 봐서 안전)
+- 파서: 실제 요청사항 값에 `결제정보` 문자열 포함 시 잘림(스테이폴리오, 확률 낮음)
