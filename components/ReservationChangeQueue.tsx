@@ -4,7 +4,7 @@ import type { ReservationChange } from '../lib/db-types';
 import { ChannelBadge } from './Badges';
 import { formatWon, formatDateRange } from '../lib/format';
 import { displayRoomName } from '../lib/rooms';
-import { refundForChange } from '../lib/refund';
+import { refundForChange, refundFor } from '../lib/refund';
 import { changedFields, changeSummaryLabel } from '../lib/reservation-change';
 
 // 예약 변경 확인 큐. 상태는 부모(DashboardRealtime)가 소유 — 이 컴포넌트는 순수 표시 +
@@ -15,12 +15,16 @@ export function ReservationChangeQueue({
   changes,
   onKeep,
   onConfirm,
+  onCancelConfirm,
+  onUncancelConfirm,
   todayISO,
   id,
 }: {
   changes: ReservationChange[];
   onKeep: (changeId: string) => void;
   onConfirm: (changeId: string) => void;
+  onCancelConfirm: (changeId: string) => void;
+  onUncancelConfirm: (changeId: string) => void;
   todayISO?: string;
   id?: string;
 }) {
@@ -39,6 +43,102 @@ export function ReservationChangeQueue({
         <div className="empty">대기 중인 예약 변경 없음</div>
       ) : (
         pending.map((c) => {
+          if (c.kind === 'cancel') {
+            return (
+              <div key={c.id} className="card">
+                <div className="badge-row">
+                  <ChannelBadge channel={c.reservation_channel} />
+                  <span className="card-title">
+                    {c.prev_guest_name ?? '이름 미상'}
+                  </span>
+                </div>
+
+                <div className="change-rows">
+                  <div className="change-row">
+                    {formatDateRange(c.prev_check_in, c.prev_check_out)} ·{' '}
+                    {displayRoomName(c.prev_room_name)} · {formatWon(c.prev_amount)}
+                  </div>
+                  <div className="change-row">
+                    <em>
+                      취소 요청
+                      {c.cancel_reason ? ` — 사유: ${c.cancel_reason}` : ''}
+                      {c.cancel_source === 'stayfolio_ics_missing'
+                        ? ' (스테이폴리오 캘린더에서 사라짐)'
+                        : ''}
+                    </em>
+                  </div>
+                  {c.reservation_guest_request && (
+                    <div className="guest-request">
+                      손님 요청: {c.reservation_guest_request}
+                    </div>
+                  )}
+                </div>
+
+                <PenaltyBanner
+                  refund={refundFor(c.prev_check_in, c.prev_amount, todayISO)}
+                  total={c.prev_amount}
+                />
+
+                <div className="badge-row">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => onKeep(c.id)}
+                  >
+                    기존 예약 유지
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => onCancelConfirm(c.id)}
+                  >
+                    취소 확정
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          if (c.kind === 'uncancel') {
+            return (
+              <div key={c.id} className="card">
+                <div className="badge-row">
+                  <ChannelBadge channel={c.reservation_channel} />
+                  <span className="card-title">
+                    {c.prev_guest_name ?? '이름 미상'}
+                  </span>
+                </div>
+
+                <div className="change-rows">
+                  <div className="change-row">
+                    {formatDateRange(c.prev_check_in, c.prev_check_out)} ·{' '}
+                    {displayRoomName(c.prev_room_name)} · {formatWon(c.prev_amount)}
+                  </div>
+                  <div className="change-row">
+                    <em>취소된 예약에 재접수 메일 도착 — 되살릴까요?</em>
+                  </div>
+                </div>
+
+                <div className="badge-row">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => onKeep(c.id)}
+                  >
+                    취소 유지
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => onUncancelConfirm(c.id)}
+                  >
+                    예약 되살리기
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
           const fields = changedFields(
             {
               check_in: c.prev_check_in,
@@ -86,6 +186,11 @@ export function ReservationChangeQueue({
                   {displayRoomName(c.new_room_name)} · {formatWon(c.new_amount)}{' '}
                   <em>({summary})</em>
                 </div>
+                {c.reservation_guest_request && (
+                  <div className="guest-request">
+                    손님 요청: {c.reservation_guest_request}
+                  </div>
+                )}
               </div>
 
               <PenaltyBanner refund={refund} total={c.prev_amount} />

@@ -30,3 +30,11 @@ export function StatusBadge({ status }: { status: ReservationStatus }) {
 export function ChangeRequestBadge() {
   return <span className="badge badge-change-request">변경 요청</span>;
 }
+
+export function CancelRequestBadge() {
+  return <span className="badge badge-cancel-request">취소 요청</span>;
+}
+
+export function UncancelRequestBadge() {
+  return <span className="badge badge-uncancel-request">되살리기 요청</span>;
+}
