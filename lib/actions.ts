@@ -148,3 +148,23 @@ export async function confirmReservationChange(
   revalidatePath('/');
   return { error: null };
 }
+
+export async function confirmCancelReview(
+  changeId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('confirm_cancel_review', { p_change_id: changeId });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return { error: null };
+}
+
+export async function confirmUncancelReview(
+  changeId: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('confirm_uncancel_review', { p_change_id: changeId });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return { error: null };
+}
