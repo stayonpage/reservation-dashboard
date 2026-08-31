@@ -14,6 +14,15 @@
 - SQL Editor 팁: 멀티스테이트먼트 실행 시 **마지막 SELECT 결과만** 보임. 여러 assert 는 DO 블록+raise 로
   모아야 함. `create temp table … on commit drop` 은 에디터가 문장 사이에서 드롭시킴 → `on commit drop` 빼기.
 
+### 배포 완료 (2026-08-31)
+
+- PR #1 (`stayonpage/reservation-dashboard`) 웹 UI 로 머지 → `main` `7eb6f05`.
+- `0023` 을 운영 SQL Editor 에서 직접 Run (에러 없음). Vercel 자동 배포 완료.
+- `gh workflow run poll.yml` 수동 트리거 → 네이버/지메일/reconcile 3단계 전부 success →
+  새 앱 + 0023 연동 정상, 크론 복구 확인.
+- 스키마 확인 쿼리 4/4: `old_unique_gone=t`, `manual_check_kept=t`, `ingest_arg_counts={14}`, `queue_ok=t`.
+- **남은 것:** 대시보드 4버튼 실전 스모크(직원 로그인 필요), opus 미룬 Minor 5개(선택).
+
 ## 현재 상태
 
 - **브랜치:** `feat/reservation-change-review` @ `3bf9313` (merge-base `a7c90a1` 기준 29 커밋)
