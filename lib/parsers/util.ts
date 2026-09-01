@@ -66,8 +66,13 @@ export function extractLabeledFields(
     const { l, i } = positions[k];
     const start = i + l.length;
     const end = k + 1 < positions.length ? positions[k + 1].i : text.length;
-    out[l] = text
-      .slice(start, end)
+    let val = text.slice(start, end);
+    // html-to-text 변환 잡음(아웃룩 조건부 주석·섹션 마커)이 값 뒤에 붙는다 — 특히 뒤에
+    // 다른 라벨이 없는 마지막 필드(요청사항·취소사유)는 메일 푸터를 통째로 흡수한다.
+    // 첫 HTML 주석 개시(<!--)에서 자른다. 실제 필드 값에는 <!-- 가 들어갈 일이 없다.
+    const c = val.indexOf('<!--');
+    if (c !== -1) val = val.slice(0, c);
+    out[l] = val
       .replace(/^[\s:：]+/, '')
       .replace(/\s+/g, ' ')
       .trim();

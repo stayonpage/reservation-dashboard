@@ -184,3 +184,40 @@ describe('parseNaverEmail — 실제 HTML 메일(주석 잡음 포함)', () => {
     expect(r.options[5]).toEqual({ name: '다독다독', qty: 2, price: 20000 });
   });
 });
+
+// 실제 취소 메일(2026-09 수신) — 뒤에 다른 라벨이 없는 '요청사항'·'취소사유' 가 메일 푸터
+// (<!-- 주석 -->, "본 메일은 발신전용", "Copyright ⓒ NAVER Corp." 등)를 통째로 흡수했다.
+// v2 취소 카드가 이 두 값을 화면에 노출하며 드러난 버그. 라벨 값은 첫 <!-- 에서 잘려야 한다.
+const CANCEL_WITH_FOOTER = `스테이 온 페이지 북스테이
+고객님이 예약을 취소 하셨습니다.
+예약자명 정*주님
+예약신청 일시 2026.08.20. 10:00:00
+예약취소 일시 2026.08.31. 15:00:00
+예약번호 1300000000
+예약상품 객실 서쪽
+이용일시 2026.09.26.(토)~2026.09.27.(일) (1박 2일)
+결제상태 환불완료
+결제수단 신용카드 간편결제
+환불금액 148,000원
+결제금액 객실 서쪽(1) 148,000원 = 148,000원
+요청사항 - <!--// 예약 상품 정보 --> <!-- 버튼 --> 예약확정하러 가기 스마트플레이스 <!--// 버튼 --> 본 메일은 발신전용입니다. 이용약관 I 운영정책 I 개인정보처리방침 Copyright ⓒ NAVER Corp. All Rights Reserved. <!--[if mso]> </td> </tr> </table> <![endif]-->
+취소사유 일정변경 <!--// 예약 상품 정보 --> <!-- 버튼 --> 자세히 보기 스마트플레이스 <!--// 버튼 --> 본 메일은 발신전용입니다. Copyright ⓒ NAVER Corp. All Rights Reserved. <!--[if mso]> </td> </tr> </table> <![endif]-->`;
+
+describe('parseNaverEmail — 취소 메일 푸터 잡음', () => {
+  it("'취소사유' 값이 푸터를 흡수하지 않고 '일정변경' 만 담는다", () => {
+    const r = parseNaverEmail(CANCEL_WITH_FOOTER)!;
+    const fields = (r.raw_payload as { fields: Record<string, string> }).fields;
+    expect(fields['취소사유']).toBe('일정변경');
+  });
+
+  it("'요청사항' 값이 푸터를 흡수하지 않아 guest_request 는 null('-')", () => {
+    expect(parseNaverEmail(CANCEL_WITH_FOOTER)!.guest_request).toBeNull();
+  });
+
+  it('푸터 없는 취소 메일은 기존대로 취소사유 그대로 추출', () => {
+    const fields = (parseNaverEmail(CANCEL_SAMPLE)!.raw_payload as {
+      fields: Record<string, string>;
+    }).fields;
+    expect(fields['취소사유']).toBe('카드로변경');
+  });
+});
