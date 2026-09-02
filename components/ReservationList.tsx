@@ -52,7 +52,7 @@ export function ReservationList({
 
   const filtered = reservations
     .filter((r) => tab === 'all' || r.status === tab)
-    .sort((a, b) => a.check_in.localeCompare(b.check_in));
+    .sort((a, b) => b.check_in.localeCompare(a.check_in)); // 체크인 날짜 늦은 순(최근이 위)
   const shown = expanded ? filtered : filtered.slice(0, COLLAPSED_COUNT);
   const hiddenCount = filtered.length - shown.length;
 
