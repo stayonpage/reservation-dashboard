@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { createClient } from '../lib/supabase/client';
+import { getReservations, getBlockTasks } from '../lib/queries';
 import type { Reservation, BlockTask, ReservationChange } from '../lib/db-types';
 import { DepositQueue } from './DepositQueue';
 import { BlockWorklist } from './BlockWorklist';
@@ -210,7 +211,22 @@ export function DashboardRealtime({
     });
   };
 
-  // 낙관적 제거: 이 두 버튼은 카드(=조작 수단) 자체를 없애므로, 서버 액션이 실패하면
+  // 취소확정/변경확정/되살리기는 예약 상태·막기 태스크를 바꾼다(예약 취소, done/block →
+  // pending/unblock "다시 열기" 등). realtime 이 지연·누락되면 달력·막기 워크리스트가
+  // 새로고침 전까지 안 바뀌므로, 액션 성공 직후 서버에서 다시 읽어 화면을 맞춘다.
+  const syncReservationsAndBlocks = () => {
+    const sb = createClient();
+    Promise.all([getReservations(sb), getBlockTasks(sb)])
+      .then(([res, blk]) => {
+        setReservations(res);
+        setBlockTasks(blk);
+      })
+      .catch((e) =>
+        console.error('[대시보드] 큐 처리 후 재조회 실패', e),
+      );
+  };
+
+  // 낙관적 제거: 이 버튼들은 카드(=조작 수단) 자체를 없애므로, 서버 액션이 실패하면
   // 되돌려 놓고 눈에 보이게 알린다(그냥 두면 새로고침 전까지 카드가 사라진 채로 남음).
   const resolveChange = (
     changeId: string,
@@ -221,7 +237,10 @@ export function DashboardRealtime({
     setChanges((prev) => prev.filter((c) => c.id !== changeId));
     startTransition(() => {
       action(changeId).then((res) => {
-        if (!res.error) return;
+        if (!res.error) {
+          syncReservationsAndBlocks();
+          return;
+        }
         console.error(failMsg, res.error);
         if (removed) {
           setChanges((prev) =>
