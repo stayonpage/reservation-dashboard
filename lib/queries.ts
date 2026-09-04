@@ -13,12 +13,17 @@ export async function getReservations(
   // 매출·점유율이 틀리게 나온다(운영자 피드백, 2026-07: "통계가 어제부터 계산된 것처럼
   // 나온다"). 캘린더에서도 지난 예약을 계속 보고 싶다는 요청까지 겹쳐서, 과거 제외를 없애고
   // 전체 예약을 다 가져온다. 목록 화면(전체 예약)은 3건+더보기로 접어서 많아져도 안 불편하다.
+  // 명시 컬럼만 — '*' 는 메일 원문이 통째로 든 raw_payload(jsonb)까지 매 로드마다 끌어와,
+  // 예약이 쌓일수록 SSR 응답이 무거워지고 동시 접속 시 timeout 위험이 커진다.
+  // raw_payload 는 대시보드 어디서도 안 쓴다(재파싱·감사용, ingest_log 에도 원문 보존).
   const { data, error } = await supabase
     .from('reservations')
-    .select('*')
+    .select(
+      'id,channel,channel_reservation_id,guest_name,guest_phone,room_name,check_in,check_out,prev_check_in,prev_check_out,guest_request,amount,options,payment_method,payment_status,status,deposit_confirmed_by,deposit_confirmed_at,confirmed_by,confirmed_at,cancelled_by,cancelled_at,detected_at,updated_at,notes',
+    )
     .order('check_in', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as Reservation[];
+  return (data ?? []) as unknown as Reservation[];
 }
 
 interface BlockTaskRow {
