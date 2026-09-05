@@ -37,12 +37,35 @@ export default async function DashboardPage() {
   }
 
   const supabase = await createClient();
-  const [reservations, blockTasks, lastSync, pendingChanges] = await Promise.all([
+  // 계측: 4개 쿼리 중 무엇이 왜 실패하는지 Vercel 로그에 남긴다(Hobby 로그 보존 ~1h,
+  // digest 만으론 범인 특정 불가). 실패는 그대로 던져 app/error.tsx 가 받게 둔다.
+  const settled = await Promise.allSettled([
     getReservations(supabase),
     getBlockTasks(supabase),
     getLastSyncByChannel(supabase),
     getPendingReservationChanges(supabase),
   ]);
+  const names = ['getReservations', 'getBlockTasks', 'getLastSyncByChannel', 'getPendingReservationChanges'] as const;
+  const failed = settled.flatMap((r, i) =>
+    r.status === 'rejected' ? [{ name: names[i], reason: r.reason }] : [],
+  );
+  if (failed.length > 0) {
+    for (const f of failed) {
+      const e = f.reason as { message?: string; code?: string; details?: string; hint?: string };
+      console.error(
+        `[page] ${f.name} 실패 — message=${e?.message} code=${e?.code} details=${e?.details} hint=${e?.hint}`,
+      );
+    }
+    throw failed[0].reason;
+  }
+  const [reservations, blockTasks, lastSync, pendingChanges] = settled.map(
+    (r) => (r as PromiseFulfilledResult<unknown>).value,
+  ) as [
+    Awaited<ReturnType<typeof getReservations>>,
+    Awaited<ReturnType<typeof getBlockTasks>>,
+    Awaited<ReturnType<typeof getLastSyncByChannel>>,
+    Awaited<ReturnType<typeof getPendingReservationChanges>>,
+  ];
 
   const now = new Date();
   // "오늘"은 서버에서 한 번만 확정 — 클라이언트가 각자 new Date() 하면 KST 자정 근처에
