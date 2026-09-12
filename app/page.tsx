@@ -1,5 +1,5 @@
 import { isSupabaseConfigured } from '../lib/supabase/config';
-import { createClient } from '../lib/supabase/server';
+import { createAdminClient } from '../lib/supabase/admin';
 import {
   getReservations,
   getBlockTasks,
@@ -36,7 +36,7 @@ export default async function DashboardPage() {
     );
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   // 계측: 4개 쿼리 중 무엇이 왜 실패하는지 Vercel 로그에 남긴다(Hobby 로그 보존 ~1h,
   // digest 만으론 범인 특정 불가). 실패는 그대로 던져 app/error.tsx 가 받게 둔다.
   const settled = await Promise.allSettled([
