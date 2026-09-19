@@ -154,4 +154,22 @@ describe('reconcileStayfolioCancellations', () => {
     mockQueryError = { message: 'db down' };
     await expect(reconcileStayfolioCancellations()).rejects.toBeTruthy();
   });
+
+  it('★ supabase-js 는 throwOnError() 없이 쓰면 쿼리 실패 시 PostgrestError 인스턴스가 아니라 ' +
+    '{message,code,details,hint} 평범한 객체를 error 로 돌려준다(실사고: Vercel 로그에 ' +
+    '"[reconcile-stayfolio] failed: [object Object]" 만 남고 실제 원인이 소실됨 — 호출부의 ' +
+    '`e instanceof Error ? e.message : String(e)` 가 평범한 객체를 Error 로 인식 못 해 String() 폴백으로 ' +
+    '떨어졌기 때문). 그래서 이 함수는 던지기 전에 반드시 진짜 Error 로 감싸 message 가 보존되게 해야 한다', async () => {
+    mockQueryError = { message: 'db down', code: '57P03', details: '', hint: null };
+
+    let caught: unknown;
+    try {
+      await reconcileStayfolioCancellations();
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain('db down');
+  });
 });

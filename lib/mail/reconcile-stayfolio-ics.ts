@@ -74,7 +74,11 @@ export async function reconcileStayfolioCancellations(): Promise<ReconcileResult
     .gt('check_out', today)
     .returns<ActiveReservation[]>();
 
-  if (error) throw error;
+  // supabase-js 는 throwOnError() 를 안 쓰면 쿼리 실패 시 PostgrestError 인스턴스가 아니라
+  // {message,code,details,hint} 평범한 객체를 error 로 돌려준다. 그대로 던지면 호출부의
+  // `e instanceof Error ? e.message : String(e)` 가 이를 Error 로 인식 못 해 String() 폴백으로
+  // 떨어지고, 로그에 "[object Object]"만 남아 실제 원인이 소실된다(2026-09-19 실사고).
+  if (error) throw new Error(error.message ?? String(error));
 
   const byRoom = new Map<string, ActiveReservation[]>();
   for (const r of reservations ?? []) {
