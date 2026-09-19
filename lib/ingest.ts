@@ -39,17 +39,28 @@ export async function handleIncoming(args: {
 }): Promise<IngestResult> {
   const { source, externalId, raw, parse, receivedAt } = args;
 
-  // 1) 원시 멱등 기록. unique(source, external_id) 충돌 = 이미 받은 메시지 → 중복.
+  const markLog = (patch: Record<string, unknown>) =>
+    supabase.from('ingest_log').update(patch).match({ source, external_id: externalId });
+
+  // 1) 원시 멱등 기록. unique(source, external_id) 충돌 시, 그 기존 행이 정말 "이미 처리
+  // 완료"(parsed)인지 "이전 시도가 파싱/DB 오류로 실패했거나 중간에 끊겼다"인지 구분한다.
+  // 실사례(2026-09): 박재홍님 10/2 예약이 ingest_reservation RPC 의 일시적 Gateway Timeout
+  // 으로 실패했는데, 이 insert 는 이미 성공해 있어서 다음 폴링부터 계속 "중복"으로 오인돼
+  // 재시도가 아예 안 되고 예약이 영구 유실됐다(직원이 수기 등록). parsed 가 아니면 재시도한다.
   const { error: logErr } = await supabase
     .from('ingest_log')
     .insert({ source, external_id: externalId, raw, status: 'received' });
   if (logErr) {
-    if (logErr.code === '23505') return { status: 'duplicate' };
-    throw logErr;
+    if (logErr.code !== '23505') throw logErr;
+    const { data: existing, error: fetchErr } = await supabase
+      .from('ingest_log')
+      .select('status')
+      .match({ source, external_id: externalId })
+      .single();
+    if (fetchErr) throw fetchErr;
+    if (existing?.status === 'parsed') return { status: 'duplicate' };
+    // 'received' 또는 'parse_failed' → 아래로 이어져 같은 파싱·RPC 를 재시도한다.
   }
-
-  const markLog = (patch: Record<string, unknown>) =>
-    supabase.from('ingest_log').update(patch).match({ source, external_id: externalId });
 
   // 2) 파싱. 실패해도 원문은 ingest_log에 남아 재파싱·디버깅 가능(무음 유실 방지).
   const parsed = await parse(raw);
