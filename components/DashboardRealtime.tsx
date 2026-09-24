@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { createClient } from '../lib/supabase/client';
-import { getReservations, getBlockTasks } from '../lib/queries';
+import {
+  getReservations,
+  getBlockTasks,
+  getPendingReservationChanges,
+} from '../lib/queries';
+import { attachResync } from '../lib/resync';
 import type { Reservation, BlockTask, ReservationChange } from '../lib/db-types';
 import { DepositQueue } from './DepositQueue';
 import { BlockWorklist } from './BlockWorklist';
@@ -63,9 +68,25 @@ export function DashboardRealtime({
     reservationsRef.current = reservations;
   }, [reservations]);
 
+  // 재조회 함수의 최신본(아래에서 정의). 구독·이벤트 useEffect 는 deps [] 라서 ref 로 참조한다.
+  const syncAllRef = useRef<() => void>(() => {});
+
+  // 폰 PWA/PC 탭이 백그라운드·절전·네트워크 단절에서 돌아오면 실시간 연결이 끊긴 채 옛 화면
+  // 그대로라서(새로고침해야 맞음) 복귀·네트워크 복구 시점에 한 번 다시 불러온다.
+  useEffect(
+    () =>
+      attachResync({
+        doc: document,
+        win: window,
+        onResync: () => syncAllRef.current(),
+      }),
+    [],
+  );
+
   useEffect(() => {
     const supabase = createClient();
     let cancelled = false;
+    let dropped = false; // 구독이 끊긴 적 있는지 — 재연결 시 놓친 변경을 재조회로 메우기 위함
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     // 세션(JWT)이 완전히 로드되기 전에 구독하면 realtime 소켓이 익명 권한으로 붙어
@@ -170,6 +191,17 @@ export function DashboardRealtime({
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             console.error('[realtime] 구독 실패:', status, err);
           }
+          if (
+            status === 'CHANNEL_ERROR' ||
+            status === 'TIMED_OUT' ||
+            status === 'CLOSED'
+          ) {
+            dropped = true;
+          } else if (status === 'SUBSCRIBED' && dropped) {
+            // 끊겼다가 다시 붙은 경우: 끊긴 동안 놓친 변경을 재조회로 메운다.
+            dropped = false;
+            syncAllRef.current();
+          }
         });
     });
 
@@ -214,17 +246,30 @@ export function DashboardRealtime({
   // 취소확정/변경확정/되살리기는 예약 상태·막기 태스크를 바꾼다(예약 취소, done/block →
   // pending/unblock "다시 열기" 등). realtime 이 지연·누락되면 달력·막기 워크리스트가
   // 새로고침 전까지 안 바뀌므로, 액션 성공 직후 서버에서 다시 읽어 화면을 맞춘다.
-  const syncReservationsAndBlocks = () => {
+  // 같은 재조회를 화면 복귀·네트워크 복구·실시간 재연결 때도 쓴다(위 attachResync / subscribe).
+  // 일시 오류(브라우저 JWT 시계오차 PGRST303, 절전 직후 네트워크 미복구 등)는 3초 뒤 1회 재시도.
+  const syncAll = () => {
     const sb = createClient();
-    Promise.all([getReservations(sb), getBlockTasks(sb)])
-      .then(([res, blk]) => {
+    const run = () =>
+      Promise.all([
+        getReservations(sb),
+        getBlockTasks(sb),
+        getPendingReservationChanges(sb),
+      ]);
+    run()
+      .catch(
+        () => new Promise((r) => setTimeout(r, 3000)).then(run),
+      )
+      .then(([res, blk, chg]) => {
         setReservations(res);
         setBlockTasks(blk);
+        setChanges(chg);
       })
-      .catch((e) =>
-        console.error('[대시보드] 큐 처리 후 재조회 실패', e),
-      );
+      .catch((e) => console.error('[대시보드] 재조회 실패', e));
   };
+  useEffect(() => {
+    syncAllRef.current = syncAll;
+  });
 
   // 낙관적 제거: 이 버튼들은 카드(=조작 수단) 자체를 없애므로, 서버 액션이 실패하면
   // 되돌려 놓고 눈에 보이게 알린다(그냥 두면 새로고침 전까지 카드가 사라진 채로 남음).
@@ -238,7 +283,7 @@ export function DashboardRealtime({
     startTransition(() => {
       action(changeId).then((res) => {
         if (!res.error) {
-          syncReservationsAndBlocks();
+          syncAll();
           return;
         }
         console.error(failMsg, res.error);
