@@ -1,5 +1,14 @@
 # "오늘의 페이지" 랜덤객실 배정 Implementation Plan
 
+> **2026-10-02 전체 리뷰 후 수정 (이 플랜 완료 후 발견):** Task 3의 `on conflict (...) do nothing`은
+> 실제로 적용되지 않았다 — 운영 DB `block_tasks`에 그 unique 제약이 없어서(0001_init.sql과 달리
+> 0023 §3에서 의도적으로 제거됨, drift 아님). `where not exists`로 교체했고, 거기에 더해
+> **배정 전 직원이 ingest-time 네이버·스테이폴리오 태스크를 먼저 체크(done)해버리면 배정 후
+> 재생성이 안 되는 오버부킹 버그**를 찾아 "배정 시 done 태스크 재오픈" 로직을 추가했다. 최종
+> 구현은 `supabase/migrations/0027_assign_random_room.sql` / `scripts/verify-0027.sql`이 기준이고,
+> 아래 Task 3 본문(이미 실행된 과거 지시문)은 당시 작성본 그대로 남겨둔다. 상세: 설계 문서 §4 상단
+> 노트.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 예약확인 큐에서 "오늘의 페이지"(아임웹 가상 랜덤객실) 예약에 실제 객실(page26/452/8/127)을 배정하면, 해당 예약의 `room_name`이 갱신되고 아임웹·네이버·스테이폴리오 3채널 전부에 막기 할 일이 자동 생성된다.

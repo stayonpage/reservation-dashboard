@@ -14,8 +14,8 @@ export interface RoomDef {
 }
 
 // 아임웹 평일 전용 랜덤객실 가상 상품. 예약 확정 시 직원이 실제 객실(page26/452/8/127)을
-// 배정하기 전까지 room_name이 이 값 그대로 남아있다 — 배정 대기 판별에 쓴다(lib/actions.ts,
-// components/ReservationList.tsx). 아임웹 상품명과 정확히 일치해야 함(2026-10-02 등록).
+// 배정하기 전까지 room_name이 이 값 그대로 남아있다 — 배정 대기 판별에 쓴다
+// (components/ReservationList.tsx). 아임웹 상품명과 정확히 일치해야 함(2026-10-02 등록).
 export const TODAY_PAGE_PRODUCT_NAME = '오늘의 페이지';
 
 export const ROOMS: RoomDef[] = [

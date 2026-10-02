@@ -40,11 +40,27 @@ begin
      set room_name = p_room_name
    where id = p_reservation_id;
 
-  -- 3채널 전부 막기 태스크 생성. 멱등: 이미 있는 (reservation_id, target_channel) 조합은
+  -- "오늘의 페이지"는 아임웹 접수 시점에 ingest_reservation이 이미 나머지 2채널(네이버·
+  -- 스테이폴리오) block_tasks를 만들어 둔 상태다(들어온 채널=아임웹 제외 규칙, 0002 §64-67).
+  -- 배정 전에 직원이 그 2건을 먼저 체크해버리면(아직 "오늘의 페이지"라고만 뜨니 헷갈려서
+  -- 할 수 있음) 아래 insert가 이미 존재하는 (reservation_id, target_channel)로 보고 건너뛰어
+  -- 다시 안 만든다 — 실제 배정 객실이 네이버·스테이폴리오에 영영 안 막히는 사고가 난다
+  -- (2026-10-02 전체 리뷰에서 발견). 그래서 insert 전에 이 예약의 done 상태 block 태스크를
+  -- 전부 pending으로 되돌린다 — 재배정(실수 정정) 때도 같은 이유로 안전하다.
+  update block_tasks
+     set status = 'pending', done_by = null, done_at = null
+   where reservation_id = p_reservation_id
+     and action = 'block'
+     and status = 'done'
+     and check_in = v_check_in
+     and check_out = v_check_out;
+
+  -- 3채널 전부 막기 태스크 보장. 멱등: 이미 있는 (reservation_id, target_channel) 조합은
   -- where not exists로 걸러서 재배정으로 또 호출돼도 중복 insert 안 됨.
-  -- (운영 DB의 block_tasks에는 (reservation_id, target_channel) unique 제약이 실제로는
-  -- 없어서 — 0001_init.sql 정의와 실제 스키마가 어긋남, 2026-10-02 확인 — on conflict를
-  -- 못 쓴다. 제약을 새로 거는 대신 함수를 제약-불필요 방식으로 작성.)
+  -- (운영 DB의 block_tasks에는 (reservation_id, target_channel) unique 제약이 없다 —
+  -- 0001_init.sql 정의와 달리 0023 §3에서 의도적으로 제거됨: 변경 확정 시 같은 채널에
+  -- "옛 날짜 다시 열기"와 "새 날짜 막기"가 동시에 존재해야 하기 때문. 그래서 on conflict를
+  -- 못 쓰고 where not exists로 작성.)
   insert into block_tasks (reservation_id, target_channel, check_in, check_out)
     select p_reservation_id, c, v_check_in, v_check_out
       from unnest(enum_range(null::channel)) as c

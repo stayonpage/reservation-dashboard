@@ -38,67 +38,32 @@ export const TODAY_PAGE_PRODUCT_NAME = '오늘의 페이지';
 
 직원이 대시보드에서 로그인 상태로 직접 누르는 액션이라 `toggle_block_task`/`confirm_deposit`(0003)과 같은 패턴 — **`security invoker`** + `auth.uid()`(definer 아님, `set search_path` 고정도 불필요 — 0025는 definer 함수에만 적용된 보안조치).
 
-```sql
-create or replace function assign_random_room(
-  p_reservation_id uuid,
-  p_room_name text  -- 순수 객실 코드만, 예: 'page26' (책 제목 안 붙임 — 6절 참고)
-)
-returns void
-language plpgsql
-security invoker
-as $$
-declare
-  v_prev_room_name text;
-  v_check_in date;
-  v_check_out date;
-  v_channel channel;
-  v_status reservations.status%type;
-  v_uid uuid := auth.uid();
-begin
-  select room_name, check_in, check_out, channel, status
-    into v_prev_room_name, v_check_in, v_check_out, v_channel, v_status
-    from reservations
-   where id = p_reservation_id
-     for update;
-
-  if not found then
-    raise exception '예약을 찾을 수 없습니다: %', p_reservation_id;
-  end if;
-
-  if v_status = 'cancelled' then
-    raise exception '취소된 예약은 배정할 수 없습니다';
-  end if;
-
-  update reservations
-     set room_name = p_room_name
-   where id = p_reservation_id;
-
-  -- 3채널 전부 막기 태스크 생성 (오늘의 페이지 ≠ 실제 객실 캘린더라서 아임웹도 포함).
-  -- 멱등: 같은 예약에 재배정이 들어와도 (reservation_id, target_channel) unique라 중복 안 생김.
-  insert into block_tasks (reservation_id, target_channel, check_in, check_out)
-    select p_reservation_id, c, v_check_in, v_check_out
-      from unnest(enum_range(null::channel)) as c
-    on conflict (reservation_id, target_channel) do nothing;
-
-  insert into reservation_events (reservation_id, actor, type, detail)
-    values (
-      p_reservation_id,
-      v_uid,
-      'room_assigned',
-      jsonb_build_object('prev_room_name', v_prev_room_name, 'new_room_name', p_room_name)
-    );
-end;
-$$;
-
-grant execute on function assign_random_room(uuid, text) to authenticated;
-```
+> **2026-10-02 전체 리뷰 후 수정**: 아래는 최초 설계 당시 작성한 버전이며, 실제 배포본과 다르다 —
+> 최종 구현은 `supabase/migrations/0027_assign_random_room.sql`을 참고할 것(한 곳만 유지, 중복
+> 유지로 인한 drift 방지). 바뀐 점 요약:
+> 1. `on conflict (reservation_id, target_channel) do nothing` → `where not exists (...)`.
+>    운영 DB의 `block_tasks`에는 애초에 `(reservation_id, target_channel)` unique 제약이 없다 —
+>    `0001_init.sql`과 달리 **의도적으로** `0023_reservation_change_review.sql` §3에서 제거됨
+>    (변경 확정 시 같은 채널에 "옛 날짜 다시 열기"+"새 날짜 막기"가 동시에 존재해야 해서).
+>    "스키마 drift"가 아니라 0023을 안 읽고 설계한 내 실수.
+> 2. **배정 직전에 `update block_tasks set status='pending', ... where ... status='done'` 한 단계
+>    추가됨.** "오늘의 페이지"는 아임웹 접수 시점에 `ingest_reservation`이 이미 네이버·스테이폴리오
+>    block_tasks를 만들어 둔다(0002 §64-67, 들어온 채널=아임웹 제외 규칙). 직원이 배정 **전에**
+>    그 2건을 먼저 체크(done)해버리면, `where not exists`가 "이미 있다"고 보고 다시 안 만들어서
+>    실제 배정 객실이 네이버·스테이폴리오에 영영 안 막히는 오버부킹 사고가 난다. 그래서 배정 시
+>    이 예약의 done 상태 block 태스크(현재 날짜 범위만)를 pending으로 되돌린 다음 insert한다 —
+>    재배정 때도 같은 이유로 필요.
+> 3. `v_channel` 변수는 안 씀(제거).
+>
+> 아래 11절(§6) 재배정 서술도 이 변경으로 업데이트됨 — 재배정 시 이전 room의 done 태스크도
+> 함께 재오픈된다(2번과 같은 메커니즘).
 
 - `reservation_events.type`은 `event_type` enum이고 현재 `'room_assigned'` 값이 없다. `0006`/`0008`의 전례를 그대로 따라 이 마이그레이션 맨 앞에 추가한다:
   ```sql
   alter type event_type add value if not exists 'room_assigned';
   ```
   (주의: `alter type ... add value`는 같은 트랜잭션 내에서 그 값을 바로 사용할 수 없는 Postgres 제약이 있으므로, 이 문을 **별도 마이그레이션 파일**(`0026_add_room_assigned_event_type.sql`)로 분리하고 `assign_random_room` 함수 정의는 그다음 파일(`0027_assign_random_room.sql`)에 둔다.)
-- 재배정(배정 실수 정정) 시나리오: 같은 RPC를 다른 `p_room_name`으로 다시 호출하면 `room_name`만 갱신되고, 새 room에 대한 block_tasks가 추가로 생긴다. 이전에 배정했던(잘못된) 객실에 대한 block_tasks 취소/재오픈은 범위 밖(수동으로 처리 — 흔치 않은 케이스라 자동화하지 않음).
+- 재배정(배정 실수 정정) 시나리오: 같은 RPC를 다른 `p_room_name`으로 다시 호출하면 `room_name`만 갱신되고, 새 room에 대한 block_tasks가 보장된다(위 수정 2번 — 이전에 배정했던 객실의 done 태스크도 함께 pending으로 재오픈됨).
 
 ## 5. 서버 액션 — `lib/actions.ts`
 
