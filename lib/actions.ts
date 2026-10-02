@@ -168,3 +168,19 @@ export async function confirmUncancelReview(
   revalidatePath('/');
   return { error: null };
 }
+
+// "오늘의 페이지"(랜덤객실) 예약에 실제 객실을 배정 — room_name 갱신 + 3채널(아임웹 포함)
+// 막기 태스크 생성을 RPC 하나로 원자적으로 처리(supabase/migrations/0027_assign_random_room.sql).
+export async function assignRandomRoom(
+  reservationId: string,
+  roomCode: string,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('assign_random_room', {
+    p_reservation_id: reservationId,
+    p_room_name: roomCode,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return { error: null };
+}
