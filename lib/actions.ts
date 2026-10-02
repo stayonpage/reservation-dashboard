@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from './supabase/server';
 import type { Channel, PaymentStatus, ReservationOption } from './types';
+import { checkAndNotifyTodayPageBlock } from './today-page-alert';
 
 // 대시보드 뮤테이션. 인증된 사용자 컨텍스트로 RPC 호출(supabase/migrations/0003_actions_fn.sql) —
 // auth.uid()가 감사 필드에 정확히 기록되고, RLS로 미인증 요청은 자동 차단된다.
@@ -182,5 +183,21 @@ export async function assignRandomRoom(
   });
   if (error) return { error: error.message };
   revalidatePath('/');
+
+  // "오늘의 페이지" 수동 차단 알림 — 이 배정으로 실제 객실이 막 찼을 수 있다.
+  // best-effort: 실패해도 배정 자체는 성공으로 둔다.
+  try {
+    const { data: row } = await supabase
+      .from('reservations')
+      .select('check_in,check_out')
+      .eq('id', reservationId)
+      .single();
+    if (row) {
+      await checkAndNotifyTodayPageBlock(supabase, row.check_in, row.check_out);
+    }
+  } catch (e) {
+    console.error('[today-page-alert]', reservationId, e instanceof Error ? e.message : String(e));
+  }
+
   return { error: null };
 }

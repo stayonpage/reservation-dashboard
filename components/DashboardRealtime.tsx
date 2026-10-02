@@ -18,6 +18,7 @@ import { RoomCalendar } from './RoomCalendar';
 import { WeeklyOverview } from './WeeklyOverview';
 import { Statistics } from './Statistics';
 import { DoubleBookingAlert } from './DoubleBookingAlert';
+import { TodayPageBlockAlert } from './TodayPageBlockAlert';
 import { ManualReservationForm } from './ManualReservationForm';
 import {
   toggleBlockTask,
@@ -434,6 +435,7 @@ export function DashboardRealtime({
         reservations={reservations}
         onCancelReservation={handleCancelReservation}
       />
+      <TodayPageBlockAlert reservations={reservations} />
       <nav className="quick-nav">
         <a href="#changes">
           예약확인
