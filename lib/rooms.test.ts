@@ -26,6 +26,11 @@ describe('roomCodeOf', () => {
     expect(roomCodeOf('알 수 없는 방')).toBeNull();
     expect(roomCodeOf(null)).toBeNull();
   });
+
+  it('책 제목 없는 순수 코드도 매칭한다(랜덤객실 배정값)', () => {
+    expect(roomCodeOf('page26')).toBe('page26');
+    expect(roomCodeOf('page127')).toBe('page127');
+  });
 });
 
 describe('roomSortIndex', () => {
