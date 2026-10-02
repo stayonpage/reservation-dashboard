@@ -36,15 +36,16 @@ export const TODAY_PAGE_PRODUCT_NAME = '오늘의 페이지';
 
 ## 4. DB — 마이그레이션 `0026_add_room_assigned_event_type.sql` + `0027_assign_random_room.sql`
 
+직원이 대시보드에서 로그인 상태로 직접 누르는 액션이라 `toggle_block_task`/`confirm_deposit`(0003)과 같은 패턴 — **`security invoker`** + `auth.uid()`(definer 아님, `set search_path` 고정도 불필요 — 0025는 definer 함수에만 적용된 보안조치).
+
 ```sql
 create or replace function assign_random_room(
   p_reservation_id uuid,
-  p_room_name text  -- 예: 'page26 - 분홍 마음을 울리는 시인선' (실제 상품명 그대로, 기존 room_name 포맷과 동일)
+  p_room_name text  -- 순수 객실 코드만, 예: 'page26' (책 제목 안 붙임 — 6절 참고)
 )
 returns void
 language plpgsql
-security definer
-set search_path = public
+security invoker
 as $$
 declare
   v_prev_room_name text;
@@ -52,6 +53,7 @@ declare
   v_check_out date;
   v_channel channel;
   v_status reservations.status%type;
+  v_uid uuid := auth.uid();
 begin
   select room_name, check_in, check_out, channel, status
     into v_prev_room_name, v_check_in, v_check_out, v_channel, v_status
@@ -81,7 +83,7 @@ begin
   insert into reservation_events (reservation_id, actor, type, detail)
     values (
       p_reservation_id,
-      auth.uid(),
+      v_uid,
       'room_assigned',
       jsonb_build_object('prev_room_name', v_prev_room_name, 'new_room_name', p_room_name)
     );
