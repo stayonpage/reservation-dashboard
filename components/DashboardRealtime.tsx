@@ -30,6 +30,7 @@ import {
   confirmReservationChange,
   confirmCancelReview,
   confirmUncancelReview,
+  assignRandomRoom,
 } from '../lib/actions';
 import type { Channel, PaymentStatus, ReservationOption } from '../lib/types';
 
@@ -239,6 +240,26 @@ export function DashboardRealtime({
     startTransition(() => {
       confirmDeposit(reservationId).then((res) => {
         if (res.error) console.error('입금확인 실패:', res.error);
+      });
+    });
+  };
+
+  const handleAssignRandomRoom = (reservationId: string, roomCode: string) => {
+    const prevRoomName = reservations.find((r) => r.id === reservationId)?.room_name ?? null;
+    setReservations((prev) =>
+      prev.map((r) => (r.id === reservationId ? { ...r, room_name: roomCode } : r)),
+    );
+    startTransition(() => {
+      assignRandomRoom(reservationId, roomCode).then((res) => {
+        if (!res.error) {
+          syncAll();
+          return;
+        }
+        console.error('객실 배정 실패:', res.error);
+        setReservations((prev) =>
+          prev.map((r) => (r.id === reservationId ? { ...r, room_name: prevRoomName } : r)),
+        );
+        if (typeof window !== 'undefined') window.alert('객실 배정 실패: ' + res.error);
       });
     });
   };
@@ -457,6 +478,7 @@ export function DashboardRealtime({
         reservations={reservations}
         blockTasks={blockTasks}
         pendingByKind={pendingByKind}
+        onAssignRoom={handleAssignRandomRoom}
       />
       <Statistics id="stats" reservations={reservations} />
     </>
