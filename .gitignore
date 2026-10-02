@@ -10,3 +10,4 @@ npm-debug.log*
 supabase/.temp/
 .vercel
 .superpowers/
+.worktrees/
