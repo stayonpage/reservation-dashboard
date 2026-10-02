@@ -10,13 +10,14 @@ import {
   UncancelRequestBadge,
 } from './Badges';
 import { formatWon, formatDateRange, timeAgo, formatOptions, formatDateShort } from '../lib/format';
-import { displayRoomName } from '../lib/rooms';
+import { displayRoomName, ROOMS, TODAY_PAGE_PRODUCT_NAME } from '../lib/rooms';
 import type { ReservationStatus } from '../lib/types';
 
 // 3채널 통합 리스트 뷰. (캘린더 뷰는 v1 후속 — 지금은 날짜순 리스트로 통합 확인 니즈를 충족)
 // 탭을 바꿀 때마다 다시 3건으로 접힌다 — 이전 탭에서 펼쳐놨던 상태가 다른 카테고리에 남아있으면
 // 오히려 헷갈린다(막아야 할 채널의 더보기 패턴과 동일).
 const COLLAPSED_COUNT = 3;
+const ASSIGNABLE_ROOMS = ROOMS.filter((r) => r.code.startsWith('page'));
 
 const TABS: { key: ReservationStatus | 'all'; label: string }[] = [
   { key: 'all', label: '전체' },
@@ -30,15 +31,18 @@ export function ReservationList({
   reservations,
   blockTasks,
   pendingByKind,
+  onAssignRoom,
   id,
 }: {
   reservations: Reservation[];
   blockTasks: BlockTask[];
   pendingByKind: { change: Set<string>; cancel: Set<string>; uncancel: Set<string> };
+  onAssignRoom: (reservationId: string, roomCode: string) => void;
   id?: string;
 }) {
   const [tab, setTab] = useState<ReservationStatus | 'all'>('all');
   const [expanded, setExpanded] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<Record<string, string>>({});
 
   const pendingBlocksByReservation = new Map<string, number>();
   for (const t of blockTasks) {
@@ -115,6 +119,35 @@ export function ReservationList({
                       <>
                         <br />
                         옵션: {formatOptions(r.options)}
+                      </>
+                    )}
+                    {r.room_name === TODAY_PAGE_PRODUCT_NAME && r.status !== 'cancelled' && (
+                      <>
+                        <br />
+                        <span className="today-page-assign">
+                          실제 객실 배정:{' '}
+                          <select
+                            value={selectedRoom[r.id] ?? ''}
+                            onChange={(e) =>
+                              setSelectedRoom((prev) => ({ ...prev, [r.id]: e.target.value }))
+                            }
+                          >
+                            <option value="">선택</option>
+                            {ASSIGNABLE_ROOMS.map((room) => (
+                              <option key={room.code} value={room.code}>
+                                {room.label}
+                              </option>
+                            ))}
+                          </select>{' '}
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            disabled={!selectedRoom[r.id]}
+                            onClick={() => onAssignRoom(r.id, selectedRoom[r.id])}
+                          >
+                            배정 확정
+                          </button>
+                        </span>
                       </>
                     )}
                   </div>
