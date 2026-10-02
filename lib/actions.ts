@@ -106,6 +106,20 @@ export async function createManualReservation(params: {
   });
   if (error) return { error: error.message };
   revalidatePath('/');
+
+  // "오늘의 페이지" 수동 차단 알림 — 수기 입력도 실제 객실을 채울 수 있다.
+  // best-effort: 실패해도 등록 자체는 성공으로 둔다.
+  try {
+    await notifyIfReservationFillsTodayPage(supabase, {
+      room_name: params.roomName,
+      check_in: params.checkIn,
+      check_out: params.checkOut,
+      status: 'confirmed',
+    });
+  } catch (e) {
+    console.error('[today-page-alert]', params.roomName, e instanceof Error ? e.message : String(e));
+  }
+
   return { error: null };
 }
 
