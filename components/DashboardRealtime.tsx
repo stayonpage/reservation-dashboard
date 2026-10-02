@@ -492,6 +492,7 @@ export function DashboardRealtime({
         blockTasks={blockTasks}
         pendingByKind={pendingByKind}
         onAssignRoom={handleAssignRandomRoom}
+        onCancelReservation={handleCancelReservation}
         todayPageAssignedIds={todayPageAssignedIds}
       />
       <Statistics id="stats" reservations={reservations} />

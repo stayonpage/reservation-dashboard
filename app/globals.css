@@ -901,6 +901,20 @@ section {
   margin-top: 4px;
 }
 
+.reservation-cancel-btn {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--st-awaiting);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+  margin-left: auto;
+}
+
 .conflict-alert {
   background: var(--st-awaiting-bg);
   border: 2px solid var(--st-awaiting);

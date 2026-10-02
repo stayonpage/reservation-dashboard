@@ -32,6 +32,7 @@ export function ReservationList({
   blockTasks,
   pendingByKind,
   onAssignRoom,
+  onCancelReservation,
   todayPageAssignedIds,
   id,
 }: {
@@ -39,6 +40,7 @@ export function ReservationList({
   blockTasks: BlockTask[];
   pendingByKind: { change: Set<string>; cancel: Set<string>; uncancel: Set<string> };
   onAssignRoom: (reservationId: string, roomCode: string) => void;
+  onCancelReservation: (reservationId: string) => void;
   todayPageAssignedIds: Set<string>;
   id?: string;
 }) {
@@ -220,6 +222,23 @@ export function ReservationList({
                 {pendingByKind.change.has(r.id) && <ChangeRequestBadge />}
                 {pendingByKind.cancel.has(r.id) && <CancelRequestBadge />}
                 {pendingByKind.uncancel.has(r.id) && <UncancelRequestBadge />}
+                {r.status !== 'cancelled' && (
+                  <button
+                    type="button"
+                    className="reservation-cancel-btn"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `${r.guest_name ?? '이 손님'} · ${formatDateRange(r.check_in, r.check_out)} 예약을 취소할까요?`,
+                        )
+                      ) {
+                        onCancelReservation(r.id);
+                      }
+                    }}
+                  >
+                    예약 취소
+                  </button>
+                )}
               </div>
             </div>
           );
