@@ -5,6 +5,7 @@ import {
   getBlockTasks,
   getLastSyncByChannel,
   getPendingReservationChanges,
+  getTodayPageAssignedReservationIds,
 } from '../lib/queries';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import type { Channel } from '../lib/types';
@@ -44,8 +45,9 @@ export default async function DashboardPage() {
     getBlockTasks(supabase),
     getLastSyncByChannel(supabase),
     getPendingReservationChanges(supabase),
+    getTodayPageAssignedReservationIds(supabase),
   ]);
-  const names = ['getReservations', 'getBlockTasks', 'getLastSyncByChannel', 'getPendingReservationChanges'] as const;
+  const names = ['getReservations', 'getBlockTasks', 'getLastSyncByChannel', 'getPendingReservationChanges', 'getTodayPageAssignedReservationIds'] as const;
   const failed = settled.flatMap((r, i) =>
     r.status === 'rejected' ? [{ name: names[i], reason: r.reason }] : [],
   );
@@ -58,13 +60,14 @@ export default async function DashboardPage() {
     }
     throw failed[0].reason;
   }
-  const [reservations, blockTasks, lastSync, pendingChanges] = settled.map(
+  const [reservations, blockTasks, lastSync, pendingChanges, todayPageAssignedIds] = settled.map(
     (r) => (r as PromiseFulfilledResult<unknown>).value,
   ) as [
     Awaited<ReturnType<typeof getReservations>>,
     Awaited<ReturnType<typeof getBlockTasks>>,
     Awaited<ReturnType<typeof getLastSyncByChannel>>,
     Awaited<ReturnType<typeof getPendingReservationChanges>>,
+    Awaited<ReturnType<typeof getTodayPageAssignedReservationIds>>,
   ];
 
   const now = new Date();
@@ -119,6 +122,7 @@ export default async function DashboardPage() {
         initialReservations={reservations}
         initialBlockTasks={blockTasks}
         initialChanges={pendingChanges}
+        initialTodayPageAssignedIds={todayPageAssignedIds}
         todayISO={todayISO}
       />
     </main>

@@ -6,6 +6,7 @@ import {
   getReservations,
   getBlockTasks,
   getPendingReservationChanges,
+  getTodayPageAssignedReservationIds,
 } from '../lib/queries';
 import { attachResync } from '../lib/resync';
 import type { Reservation, BlockTask, ReservationChange } from '../lib/db-types';
@@ -50,16 +51,21 @@ export function DashboardRealtime({
   initialReservations,
   initialBlockTasks,
   initialChanges,
+  initialTodayPageAssignedIds,
   todayISO,
 }: {
   initialReservations: Reservation[];
   initialBlockTasks: BlockTask[];
   initialChanges: ReservationChange[];
+  initialTodayPageAssignedIds: string[];
   todayISO: string;
 }) {
   const [reservations, setReservations] = useState(initialReservations);
   const [blockTasks, setBlockTasks] = useState(initialBlockTasks);
   const [changes, setChanges] = useState(initialChanges);
+  const [todayPageAssignedIds, setTodayPageAssignedIds] = useState(
+    () => new Set(initialTodayPageAssignedIds),
+  );
   const [, startTransition] = useTransition();
 
   // realtime 핸들러가 최신 reservations 를 참조하되, 구독 useEffect 의 deps 는 [] 로 유지
@@ -252,6 +258,9 @@ export function DashboardRealtime({
     startTransition(() => {
       assignRandomRoom(reservationId, roomCode).then((res) => {
         if (!res.error) {
+          // 성공했을 때만 추가 — 실패하면 room_assigned 이벤트가 실제로 안 남으므로
+          // "재배정" 링크를 보여주면 안 된다.
+          setTodayPageAssignedIds((prev) => new Set(prev).add(reservationId));
           syncAll();
           return;
         }
@@ -276,15 +285,17 @@ export function DashboardRealtime({
         getReservations(sb),
         getBlockTasks(sb),
         getPendingReservationChanges(sb),
+        getTodayPageAssignedReservationIds(sb),
       ]);
     run()
       .catch(
         () => new Promise((r) => setTimeout(r, 3000)).then(run),
       )
-      .then(([res, blk, chg]) => {
+      .then(([res, blk, chg, assignedIds]) => {
         setReservations(res);
         setBlockTasks(blk);
         setChanges(chg);
+        setTodayPageAssignedIds(new Set(assignedIds));
       })
       .catch((e) => console.error('[대시보드] 재조회 실패', e));
   };
@@ -479,6 +490,7 @@ export function DashboardRealtime({
         blockTasks={blockTasks}
         pendingByKind={pendingByKind}
         onAssignRoom={handleAssignRandomRoom}
+        todayPageAssignedIds={todayPageAssignedIds}
       />
       <Statistics id="stats" reservations={reservations} />
     </>

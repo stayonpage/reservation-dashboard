@@ -80,6 +80,22 @@ export async function getBlockTasks(
   }));
 }
 
+// "오늘의 페이지"(랜덤객실)에서 실제 객실로 배정된 적 있는 예약 id 목록 — 재배정 UI 노출
+// 판별용(assign_random_room이 남기는 room_assigned 이벤트 존재 여부). room_name은 배정 후
+// 실제 코드로 바뀌어 더 이상 TODAY_PAGE_PRODUCT_NAME과 비교할 수 없어서 이 이벤트로 추적한다.
+export async function getTodayPageAssignedReservationIds(
+  supabase: SupabaseClient,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('reservation_events')
+    .select('reservation_id')
+    .eq('type', 'room_assigned');
+  if (error) throw error;
+  return Array.from(
+    new Set((data ?? []).map((row) => row.reservation_id as string)),
+  );
+}
+
 const SOURCE_TO_CHANNEL: Record<string, Channel> = {
   naver_email: 'naver',
   stayfolio_sms: 'stayfolio',

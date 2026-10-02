@@ -32,17 +32,22 @@ export function ReservationList({
   blockTasks,
   pendingByKind,
   onAssignRoom,
+  todayPageAssignedIds,
   id,
 }: {
   reservations: Reservation[];
   blockTasks: BlockTask[];
   pendingByKind: { change: Set<string>; cancel: Set<string>; uncancel: Set<string> };
   onAssignRoom: (reservationId: string, roomCode: string) => void;
+  todayPageAssignedIds: Set<string>;
   id?: string;
 }) {
   const [tab, setTab] = useState<ReservationStatus | 'all'>('all');
   const [expanded, setExpanded] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Record<string, string>>({});
+  // 재배정(실수 정정) — 평소엔 접어두고 "재배정" 링크를 눌렀을 때만 드롭다운을 보여준다.
+  // 최초 배정 때(room_name이 아직 TODAY_PAGE_PRODUCT_NAME)는 바로 드롭다운이 보이니 불필요.
+  const [reassigningIds, setReassigningIds] = useState<Record<string, boolean>>({});
 
   const pendingBlocksByReservation = new Map<string, number>();
   for (const t of blockTasks) {
@@ -150,6 +155,61 @@ export function ReservationList({
                         </span>
                       </>
                     )}
+                    {r.room_name !== TODAY_PAGE_PRODUCT_NAME &&
+                      r.status !== 'cancelled' &&
+                      todayPageAssignedIds.has(r.id) && (
+                        <>
+                          <br />
+                          {reassigningIds[r.id] ? (
+                            <span className="today-page-assign">
+                              재배정:{' '}
+                              <select
+                                value={selectedRoom[r.id] ?? ''}
+                                onChange={(e) =>
+                                  setSelectedRoom((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                }
+                              >
+                                <option value="">선택</option>
+                                {ASSIGNABLE_ROOMS.map((room) => (
+                                  <option key={room.code} value={room.code}>
+                                    {room.label}
+                                  </option>
+                                ))}
+                              </select>{' '}
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                disabled={!selectedRoom[r.id]}
+                                onClick={() => {
+                                  onAssignRoom(r.id, selectedRoom[r.id]);
+                                  setReassigningIds((prev) => ({ ...prev, [r.id]: false }));
+                                }}
+                              >
+                                재배정 확정
+                              </button>{' '}
+                              <button
+                                type="button"
+                                className="deeplink"
+                                onClick={() =>
+                                  setReassigningIds((prev) => ({ ...prev, [r.id]: false }))
+                                }
+                              >
+                                취소
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="deeplink"
+                              onClick={() =>
+                                setReassigningIds((prev) => ({ ...prev, [r.id]: true }))
+                              }
+                            >
+                              재배정
+                            </button>
+                          )}
+                        </>
+                      )}
                   </div>
                 </div>
                 <div className="amount">{formatWon(r.amount)}</div>
