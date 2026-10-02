@@ -40,12 +40,19 @@ begin
      set room_name = p_room_name
    where id = p_reservation_id;
 
-  -- 3채널 전부 막기 태스크 생성. 멱등: (reservation_id, target_channel) unique라
-  -- 재배정으로 또 호출돼도 중복 insert 안 됨(이미 있는 채널은 조용히 스킵).
+  -- 3채널 전부 막기 태스크 생성. 멱등: 이미 있는 (reservation_id, target_channel) 조합은
+  -- where not exists로 걸러서 재배정으로 또 호출돼도 중복 insert 안 됨.
+  -- (운영 DB의 block_tasks에는 (reservation_id, target_channel) unique 제약이 실제로는
+  -- 없어서 — 0001_init.sql 정의와 실제 스키마가 어긋남, 2026-10-02 확인 — on conflict를
+  -- 못 쓴다. 제약을 새로 거는 대신 함수를 제약-불필요 방식으로 작성.)
   insert into block_tasks (reservation_id, target_channel, check_in, check_out)
     select p_reservation_id, c, v_check_in, v_check_out
       from unnest(enum_range(null::channel)) as c
-    on conflict (reservation_id, target_channel) do nothing;
+     where not exists (
+       select 1 from block_tasks bt
+        where bt.reservation_id = p_reservation_id
+          and bt.target_channel = c
+     );
 
   insert into reservation_events (reservation_id, actor, type, detail)
     values (
