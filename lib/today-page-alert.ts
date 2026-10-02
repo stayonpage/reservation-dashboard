@@ -6,10 +6,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Reservation } from './db-types';
 import { formatDateShort } from './format';
+import { roomCodeOf } from './rooms';
 import {
   datesInRange,
   findFullTodayPageDates,
   isTodayPageSellableDate,
+  TODAY_PAGE_ROOM_CODES,
 } from './today-page-occupancy';
 import { sendMail } from './mail/send-mail';
 
@@ -53,4 +55,19 @@ export async function checkAndNotifyTodayPageBlock(
   });
 
   return fullDates;
+}
+
+/**
+ * 예약 한 건의 현재 상태(취소 아님 + 실제 4개 객실 중 하나)를 보고, 맞으면 그 날짜 범위로
+ * checkAndNotifyTodayPageBlock을 호출한다. "방이 새로 채워질 수 있는" 여러 이벤트
+ * (신규 수신, 랜덤객실 배정, 날짜변경 확정, 취소철회 확정)에서 공통으로 쓰는 진입점 —
+ * 호출부마다 이 가드를 따로 구현하지 않도록 한다.
+ */
+export async function notifyIfReservationFillsTodayPage(
+  supabase: SupabaseClient,
+  reservation: Pick<Reservation, 'room_name' | 'check_in' | 'check_out' | 'status'>,
+): Promise<void> {
+  if (reservation.status === 'cancelled') return;
+  if (!TODAY_PAGE_ROOM_CODES.includes(roomCodeOf(reservation.room_name) ?? '')) return;
+  await checkAndNotifyTodayPageBlock(supabase, reservation.check_in, reservation.check_out);
 }

@@ -1,9 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { ParsedReservation } from './types';
 import { omaibookPromoEligible, appendPromoNote } from './promo';
-import { checkAndNotifyTodayPageBlock } from './today-page-alert';
-import { roomCodeOf } from './rooms';
-import { TODAY_PAGE_ROOM_CODES } from './today-page-occupancy';
+import { notifyIfReservationFillsTodayPage } from './today-page-alert';
 
 // 수신 파이프라인 단일 진입점: 원시 메시지(메일/문자/웹훅) → 멱등 기록 → 파싱 → upsert.
 //
@@ -130,9 +128,12 @@ export async function handleIncoming(args: {
   // 하나를 채운 경우에만 의미가 있다(가상 상품 자체 예약이나 취소는 자리를 새로 채우지
   // 않으므로 건너뜀). best-effort: 실패해도 예약 수신 자체는 성공으로 둔다.
   try {
-    if (!parsed.cancelled && TODAY_PAGE_ROOM_CODES.includes(roomCodeOf(parsed.room_name) ?? '')) {
-      await checkAndNotifyTodayPageBlock(supabase, parsed.check_in, parsed.check_out);
-    }
+    await notifyIfReservationFillsTodayPage(supabase, {
+      room_name: parsed.room_name,
+      check_in: parsed.check_in,
+      check_out: parsed.check_out,
+      status: parsed.cancelled ? 'cancelled' : 'confirmed',
+    });
   } catch (e) {
     console.error('[today-page-alert]', data, e instanceof Error ? e.message : String(e));
   }

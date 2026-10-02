@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from './supabase/server';
 import type { Channel, PaymentStatus, ReservationOption } from './types';
-import { checkAndNotifyTodayPageBlock } from './today-page-alert';
+import { notifyIfReservationFillsTodayPage } from './today-page-alert';
 
 // 대시보드 뮤테이션. 인증된 사용자 컨텍스트로 RPC 호출(supabase/migrations/0003_actions_fn.sql) —
 // auth.uid()가 감사 필드에 정확히 기록되고, RLS로 미인증 요청은 자동 차단된다.
@@ -138,6 +138,31 @@ export async function keepReservationChange(
 }
 
 // [변경 확정]: 예약을 새 값으로 교체(같은 id) + 옛 날짜 다시 열기 + 새 날짜 막기 + 재트리아지.
+// 변경 확정 이후 실제 객실(page26/452/8/127)이 새로 채워졌을 수 있는 경우 공통으로 쓴다
+// (confirmReservationChange=날짜변경 확정, confirmUncancelReview=취소철회 확정) —
+// best-effort: 실패해도 확정 자체는 성공으로 둔다.
+async function notifyTodayPageAfterChange(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  changeId: string,
+): Promise<void> {
+  try {
+    const { data: change } = await supabase
+      .from('reservation_changes')
+      .select('reservation_id')
+      .eq('id', changeId)
+      .single();
+    if (!change) return;
+    const { data: row } = await supabase
+      .from('reservations')
+      .select('room_name,check_in,check_out,status')
+      .eq('id', change.reservation_id)
+      .single();
+    if (row) await notifyIfReservationFillsTodayPage(supabase, row);
+  } catch (e) {
+    console.error('[today-page-alert]', changeId, e instanceof Error ? e.message : String(e));
+  }
+}
+
 export async function confirmReservationChange(
   changeId: string,
 ): Promise<{ error: string | null }> {
@@ -147,6 +172,7 @@ export async function confirmReservationChange(
   });
   if (error) return { error: error.message };
   revalidatePath('/');
+  await notifyTodayPageAfterChange(supabase, changeId);
   return { error: null };
 }
 
@@ -167,6 +193,7 @@ export async function confirmUncancelReview(
   const { error } = await supabase.rpc('confirm_uncancel_review', { p_change_id: changeId });
   if (error) return { error: error.message };
   revalidatePath('/');
+  await notifyTodayPageAfterChange(supabase, changeId);
   return { error: null };
 }
 
@@ -189,12 +216,10 @@ export async function assignRandomRoom(
   try {
     const { data: row } = await supabase
       .from('reservations')
-      .select('check_in,check_out')
+      .select('room_name,check_in,check_out,status')
       .eq('id', reservationId)
       .single();
-    if (row) {
-      await checkAndNotifyTodayPageBlock(supabase, row.check_in, row.check_out);
-    }
+    if (row) await notifyIfReservationFillsTodayPage(supabase, row);
   } catch (e) {
     console.error('[today-page-alert]', reservationId, e instanceof Error ? e.message : String(e));
   }
