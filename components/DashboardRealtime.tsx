@@ -494,6 +494,7 @@ export function DashboardRealtime({
         onAssignRoom={handleAssignRandomRoom}
         onCancelReservation={handleCancelReservation}
         todayPageAssignedIds={todayPageAssignedIds}
+        todayISO={todayISO}
       />
       <Statistics id="stats" reservations={reservations} />
     </>
