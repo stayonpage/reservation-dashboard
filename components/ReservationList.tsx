@@ -12,6 +12,7 @@ import {
 import { formatWon, formatDateRange, timeAgo, formatOptions, formatDateShort } from '../lib/format';
 import { displayRoomName, ROOMS, TODAY_PAGE_PRODUCT_NAME } from '../lib/rooms';
 import type { ReservationStatus } from '../lib/types';
+import { listReservations } from '../lib/reservation-list';
 
 // 3채널 통합 리스트 뷰. (캘린더 뷰는 v1 후속 — 지금은 날짜순 리스트로 통합 확인 니즈를 충족)
 // 탭을 바꿀 때마다 다시 3건으로 접힌다 — 이전 탭에서 펼쳐놨던 상태가 다른 카테고리에 남아있으면
@@ -34,6 +35,7 @@ export function ReservationList({
   onAssignRoom,
   onCancelReservation,
   todayPageAssignedIds,
+  todayISO,
   id,
 }: {
   reservations: Reservation[];
@@ -42,6 +44,7 @@ export function ReservationList({
   onAssignRoom: (reservationId: string, roomCode: string) => void;
   onCancelReservation: (reservationId: string) => void;
   todayPageAssignedIds: Set<string>;
+  todayISO: string; // 6개월 이전 숨김 기준일(서버에서 확정한 KST 오늘)
   id?: string;
 }) {
   const [tab, setTab] = useState<ReservationStatus | 'all'>('all');
@@ -61,9 +64,8 @@ export function ReservationList({
     }
   }
 
-  const filtered = reservations
-    .filter((r) => tab === 'all' || r.status === tab)
-    .sort((a, b) => b.check_in.localeCompare(a.check_in)); // 체크인 날짜 늦은 순(최근이 위)
+  // 접수 최신순(새로 들어온 예약이 위) + 6개월 이전 숨김 — lib/reservation-list.ts 참고.
+  const filtered = listReservations(reservations, tab, todayISO);
   const shown = expanded ? filtered : filtered.slice(0, COLLAPSED_COUNT);
   const hiddenCount = filtered.length - shown.length;
 
