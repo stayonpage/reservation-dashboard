@@ -1,5 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Reservation, BlockTask, ReservationChange } from './db-types';
+import type {
+  Reservation,
+  BlockTask,
+  ReservationChange,
+  Subscription,
+  SubscriptionShipment,
+} from './db-types';
 import type { Channel } from './types';
 
 // 서버 컴포넌트 초기 로드용 조회. DB 컬럼명이 Reservation/BlockTask 타입과 이미 1:1이라
@@ -211,4 +217,42 @@ export async function getPendingReservationChanges(
     status: row.status,
     created_at: row.created_at,
   }));
+}
+
+// 월간구독 — 배포 순서 슬립(0029 미적용)으로 테이블이 없을 때 대시보드 전체가 500 나지 않도록 빈 배열 폴백.
+// PostgREST 는 테이블 없음을 Postgres 원본 '42P01' 이 아니라 'PGRST205'(schema cache)로 돌려준다
+// (2026-10-15 빌드에서 확인) — 둘 다 막는다.
+const isMissingTable = (code?: string) => code === '42P01' || code === 'PGRST205';
+
+export async function getSubscriptions(supabase: SupabaseClient): Promise<Subscription[]> {
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .select(
+      'id,name,phone,address,address_detail,plan_months,amount,status,start_month,end_month,applied_at,confirmed_at,ended_at,notes,created_at',
+    )
+    .order('applied_at', { ascending: false });
+  if (error) {
+    if (isMissingTable(error.code)) {
+      console.warn('getSubscriptions: subscriptions 테이블 없음 — 빈 목록으로 폴백', error.message);
+      return [];
+    }
+    throw error;
+  }
+  return (data ?? []) as unknown as Subscription[];
+}
+
+export async function getSubscriptionShipments(
+  supabase: SupabaseClient,
+): Promise<SubscriptionShipment[]> {
+  const { data, error } = await supabase
+    .from('subscription_shipments')
+    .select('id,subscription_id,month,memo,updated_at');
+  if (error) {
+    if (isMissingTable(error.code)) {
+      console.warn('getSubscriptionShipments: 테이블 없음 — 빈 목록으로 폴백', error.message);
+      return [];
+    }
+    throw error;
+  }
+  return (data ?? []) as unknown as SubscriptionShipment[];
 }

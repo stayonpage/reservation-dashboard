@@ -6,6 +6,8 @@ import {
   getLastSyncByChannel,
   getPendingReservationChanges,
   getTodayPageAssignedReservationIds,
+  getSubscriptions,
+  getSubscriptionShipments,
 } from '../lib/queries';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import type { Channel } from '../lib/types';
@@ -46,8 +48,10 @@ export default async function DashboardPage() {
     getLastSyncByChannel(supabase),
     getPendingReservationChanges(supabase),
     getTodayPageAssignedReservationIds(supabase),
+    getSubscriptions(supabase),
+    getSubscriptionShipments(supabase),
   ]);
-  const names = ['getReservations', 'getBlockTasks', 'getLastSyncByChannel', 'getPendingReservationChanges', 'getTodayPageAssignedReservationIds'] as const;
+  const names = ['getReservations', 'getBlockTasks', 'getLastSyncByChannel', 'getPendingReservationChanges', 'getTodayPageAssignedReservationIds', 'getSubscriptions', 'getSubscriptionShipments'] as const;
   const failed = settled.flatMap((r, i) =>
     r.status === 'rejected' ? [{ name: names[i], reason: r.reason }] : [],
   );
@@ -60,7 +64,7 @@ export default async function DashboardPage() {
     }
     throw failed[0].reason;
   }
-  const [reservations, blockTasks, lastSync, pendingChanges, todayPageAssignedIds] = settled.map(
+  const [reservations, blockTasks, lastSync, pendingChanges, todayPageAssignedIds, subscriptions, subscriptionShipments] = settled.map(
     (r) => (r as PromiseFulfilledResult<unknown>).value,
   ) as [
     Awaited<ReturnType<typeof getReservations>>,
@@ -68,6 +72,8 @@ export default async function DashboardPage() {
     Awaited<ReturnType<typeof getLastSyncByChannel>>,
     Awaited<ReturnType<typeof getPendingReservationChanges>>,
     Awaited<ReturnType<typeof getTodayPageAssignedReservationIds>>,
+    Awaited<ReturnType<typeof getSubscriptions>>,
+    Awaited<ReturnType<typeof getSubscriptionShipments>>,
   ];
 
   const now = new Date();
@@ -123,6 +129,8 @@ export default async function DashboardPage() {
         initialBlockTasks={blockTasks}
         initialChanges={pendingChanges}
         initialTodayPageAssignedIds={todayPageAssignedIds}
+        initialSubscriptions={subscriptions}
+        initialSubscriptionShipments={subscriptionShipments}
         todayISO={todayISO}
       />
     </main>

@@ -109,3 +109,33 @@ export interface ReservationChange {
   status: ReservationChangeStatus;
   created_at: string;
 }
+
+export type SubscriptionStatus = 'pending' | 'confirmed' | 'ended';
+
+// subscriptions(0029) 1:1 조회용 타입. 월은 'YYYY-MM'.
+export interface Subscription {
+  id: string;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  address_detail: string | null;
+  plan_months: 4 | 8;
+  amount: number;
+  status: SubscriptionStatus;
+  start_month: string;
+  end_month: string;
+  applied_at: string;
+  confirmed_at: string | null;
+  ended_at: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+// 달별 발송 메모(어떤 책·특산물이 나갔는지).
+export interface SubscriptionShipment {
+  id: string;
+  subscription_id: string;
+  month: string;
+  memo: string;
+  updated_at: string;
+}

@@ -1174,3 +1174,24 @@ section {
 }
 .prev-dates, .cal-prev-dates { color: var(--st-awaiting); font-size: 11px; }
 .cal-guest-request { font-size: 11px; color: var(--st-new); }
+
+/* 월간구독 */
+.sub-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+.sub-badge.sub-pending { background: var(--st-awaiting); }
+.sub-badge.sub-confirmed { background: var(--st-confirmed); }
+.sub-badge.sub-ended { background: #8a8a8a; }
+.sub-end-check { font-size: 13px; display: inline-flex; align-items: center; gap: 4px; }
+.sub-memo-panel { margin-top: 10px; display: grid; gap: 6px; }
+.sub-memo-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; font-size: 13px; }
+.sub-memo-row input { width: 100%; min-width: 0; padding: 6px 8px; }
+.sub-manual { margin-top: 12px; }
+.sub-manual summary { cursor: pointer; font-size: 13px; }
+.sub-manual-grid { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sub-manual-grid input, .sub-manual-grid select { min-width: 0; padding: 6px 8px; }

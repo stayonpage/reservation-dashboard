@@ -35,6 +35,11 @@ vi.mock('../parsers/imweb-email', () => ({
   parseImwebEmail: vi.fn(),
 }));
 
+const mockHandleSubscription = vi.fn();
+vi.mock('../ingest-subscription', () => ({
+  handleSubscriptionIncoming: (...args: unknown[]) => mockHandleSubscription(...args),
+}));
+
 import { pollGmailStayfolioInbox, pollGmailImwebInbox } from './poll-gmail';
 
 describe('pollGmailStayfolioInbox', () => {
@@ -173,5 +178,47 @@ describe('pollGmailImwebInbox', () => {
 
     expect(result.errors).toHaveLength(1);
     expect(mockClient.messageFlagsAdd).not.toHaveBeenCalled();
+  });
+
+  it('★ 제목이 월간구독 신청이면 구독 수집기로 보내고 예약 수집기는 부르지 않는다(읽음 처리 포함)', async () => {
+    mockClient.search.mockResolvedValue([801]);
+    mockClient.download.mockResolvedValue({ content: Buffer.from('raw') });
+    const date = new Date('2026-10-14T23:53:08Z');
+    mockParsed.mockResolvedValue({
+      messageId: '<sub-1>',
+      subject: '[스테이 온 페이지] 월간구독4개월 신청에 새 응답이 접수되었습니다.',
+      text: '이름\n홍길동',
+      date,
+    });
+    mockHandleSubscription.mockResolvedValue({ status: 'parsed' });
+
+    const result = await pollGmailImwebInbox();
+
+    expect(mockHandleSubscription).toHaveBeenCalledWith({
+      externalId: '<sub-1>',
+      raw: '제목: [스테이 온 페이지] 월간구독4개월 신청에 새 응답이 접수되었습니다.\n이름\n홍길동',
+      appliedAt: date,
+    });
+    expect(mockHandleIncoming).not.toHaveBeenCalled();
+    expect(result).toEqual({ checked: 1, parsed: 1, duplicate: 0, parseFailed: 0, errors: [] });
+    expect(mockClient.messageFlagsAdd).toHaveBeenCalledWith({ uid: '801' }, ['\\Seen'], { uid: true });
+  });
+
+  it('★ 회귀: 일반 예약 메일(제목에 월간구독 없음)은 기존대로 handleIncoming', async () => {
+    mockClient.search.mockResolvedValue([802]);
+    mockClient.download.mockResolvedValue({ content: Buffer.from('raw') });
+    mockParsed.mockResolvedValue({
+      messageId: '<iw-2>',
+      subject: '[스테이 온 페이지] 예약이 접수되어 입금 확인이 필요합니다.',
+      text: '예약 내용',
+    });
+    mockHandleIncoming.mockResolvedValue({ status: 'parsed', reservationId: 'r9' });
+
+    await pollGmailImwebInbox();
+
+    expect(mockHandleIncoming).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'imweb_email', externalId: '<iw-2>' }),
+    );
+    expect(mockHandleSubscription).not.toHaveBeenCalled();
   });
 });
