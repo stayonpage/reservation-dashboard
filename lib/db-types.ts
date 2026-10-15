@@ -128,6 +128,7 @@ export interface Subscription {
   confirmed_at: string | null;
   ended_at: string | null;
   notes: string | null;
+  stay_discount_used: boolean; // 숙박 할인 혜택을 받았는지(0030)
   created_at: string;
 }
 

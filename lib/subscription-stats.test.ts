@@ -17,6 +17,7 @@ const sub = (over: Partial<Subscription>): Subscription => ({
   confirmed_at: '2026-10-20T03:00:00Z',
   ended_at: null,
   notes: null,
+  stay_discount_used: false,
   created_at: '2026-10-15T00:00:00Z',
   ...over,
 });

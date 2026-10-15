@@ -58,7 +58,12 @@ export function SubscriptionList({
   onSetEnded: (id: string, ended: boolean) => void;
   onUpdate: (
     id: string,
-    patch: { start_month?: string; end_month?: string; notes?: string | null },
+    patch: {
+      start_month?: string;
+      end_month?: string;
+      notes?: string | null;
+      stay_discount_used?: boolean;
+    },
   ) => void;
   onSaveShipment: (subscriptionId: string, month: string, memo: string) => void;
   onCreate: (input: ManualSubscriptionInput) => void;
@@ -160,6 +165,14 @@ export function SubscriptionList({
                     <input type="checkbox" checked onChange={() => onSetEnded(s.id, false)} /> 종료
                   </label>
                 )}
+                <label className="sub-end-check">
+                  <input
+                    type="checkbox"
+                    checked={s.stay_discount_used}
+                    onChange={(e) => onUpdate(s.id, { stay_discount_used: e.target.checked })}
+                  />{' '}
+                  숙박 할인 받음
+                </label>
                 <button
                   type="button"
                   className="deeplink"
