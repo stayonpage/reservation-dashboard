@@ -77,3 +77,14 @@ export function sortSubscriptions<T extends { status: SubscriptionStatusKey; app
     return Date.parse(b.applied_at) - Date.parse(a.applied_at);
   });
 }
+
+/** "정보 복사" 버튼용 텍스트 — 이름 / 연락처 / 주소(+상세주소) 줄바꿈. 비어 있는 항목의 줄은 뺀다. */
+export function formatContactText(s: {
+  name: string;
+  phone: string | null;
+  address: string | null;
+  address_detail: string | null;
+}): string {
+  const addr = [s.address, s.address_detail].filter((v): v is string => !!v).join(' ');
+  return [s.name, s.phone, addr].filter((line): line is string => !!line).join('\n');
+}

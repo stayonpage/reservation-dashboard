@@ -8,6 +8,7 @@ import {
   defaultStartMonth,
   monthsBetween,
   sortSubscriptions,
+  formatContactText,
 } from './subscription';
 
 describe('planAmount / isPlanMonths', () => {
@@ -81,5 +82,37 @@ describe('sortSubscriptions', () => {
     const snap = rows.map((x) => x.id);
     sortSubscriptions(rows);
     expect(rows.map((x) => x.id)).toEqual(snap);
+  });
+});
+
+describe('formatContactText — 정보 복사 텍스트', () => {
+  const base = {
+    name: '홍길동',
+    phone: '01012345678',
+    address: '(38334) 경북 청도군 화양읍 동천3길 67 (교촌리)',
+    address_detail: '오마이뷱',
+  };
+
+  it('이름 / 연락처 / 주소(+상세주소) 세 줄', () => {
+    expect(formatContactText(base)).toBe(
+      '홍길동\n01012345678\n(38334) 경북 청도군 화양읍 동천3길 67 (교촌리) 오마이뷱',
+    );
+  });
+  it('상세주소가 없으면 주소만', () => {
+    expect(formatContactText({ ...base, address_detail: null })).toBe(
+      '홍길동\n01012345678\n(38334) 경북 청도군 화양읍 동천3길 67 (교촌리)',
+    );
+  });
+  it('★ 연락처가 없으면 그 줄을 뺀다', () => {
+    expect(formatContactText({ ...base, phone: null })).toBe(
+      '홍길동\n(38334) 경북 청도군 화양읍 동천3길 67 (교촌리) 오마이뷱',
+    );
+  });
+  it('★ 주소가 없으면 그 줄을 뺀다(상세주소만 있어도 그대로 한 줄)', () => {
+    expect(formatContactText({ ...base, address: null, address_detail: null })).toBe('홍길동\n01012345678');
+    expect(formatContactText({ ...base, address: null })).toBe('홍길동\n01012345678\n오마이뷱');
+  });
+  it('이름만 있어도 동작', () => {
+    expect(formatContactText({ name: '홍길동', phone: null, address: null, address_detail: null })).toBe('홍길동');
   });
 });
