@@ -20,15 +20,17 @@ ended_at, notes, source_external_id(unique, 메일 Message-ID), created_at.
 `subscription_shipments`: id, subscription_id(fk, cascade), month('YYYY-MM'), memo,
 unique(subscription_id, month) — 달별 책·특산물 기록.
 RLS: `authenticated using (true)` (기존 예약과 동일). realtime 구독 대상에 추가.
-RPC `ingest_subscription(...)`(SECURITY DEFINER, `set search_path` 고정 — 0025 규칙),
-`confirm_subscription(id)`, `unconfirm_subscription(id)`, `end_subscription(id, ended)`.
+RPC(전부 security invoker — 0003 방식, definer 아님): `confirm_subscription(id)`,
+`unconfirm_subscription(id)`, `end_subscription(id, ended)`. 수집(insert)은 RPC 없이
+service_role 클라이언트의 `upsert ... on conflict (source_external_id) do nothing`.
 
 ## 수집
 - `lib/parsers/subscription-email.ts`: 제목 `월간구독(\d+)개월 신청` 판별 + 본문 라벨(이름/연락처/주소/
   등록시각) 파싱. 상세주소는 주소 블록의 마지막 줄들을 합쳐 보관. 지원하지 않는 개월 수면 null.
 - `pollGmailImwebInbox`에서 제목이 구독이면 `handleSubscription`으로 분기(예약 파서로 안 보냄 →
   parse_failed 소음 제거). 멱등/재시도는 `ingest_log` 방식 그대로(parsed 일 때만 duplicate).
-  신규 source `imweb_subscription_email`.
+  source 는 기존 `imweb_email` 을 재사용하고 external_id 에 `subscription:` 접두어를 붙인다
+  (enum 추가 불필요, 과거에 parse_failed 로 남은 같은 메일 행과도 충돌하지 않음).
 - 수동 추가 폼: 이름·연락처·주소·4/8개월·시작달.
 - 첫 배포 시 테스트 2건은 external_id 목록으로 `ingest_log`만 `parsed`로 막아 수집 제외.
 
