@@ -9,6 +9,7 @@ import {
   endMonthOf,
   defaultStartMonth,
   kstDateOf,
+  formatContactText,
   type ManualSubscriptionInput,
   type PlanMonths,
 } from '../lib/subscription';
@@ -17,6 +18,26 @@ import { formatWon } from '../lib/format';
 // 월간구독 섹션. 상태는 부모(DashboardRealtime)가 소유 — 이 컴포넌트는 표시 + 콜백만.
 // 정렬: 입금대기 → 확정 → 종료(종료는 맨 뒤). 접어서 5건만 보이고 "더 보기".
 const COLLAPSED_COUNT = 5;
+
+// 클립보드 복사. 브라우저/PWA 가 navigator.clipboard 를 막으면(비보안 컨텍스트 등) 선택 복사로,
+// 그것도 안 되면 prompt 로 직접 복사하게 한다 — 복사가 조용히 실패하면 안 된다.
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    // 아래 대체 경로로
+  }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(ta);
+  if (!ok) window.prompt('아래 내용을 복사하세요', text);
+}
 
 export function SubscriptionList({
   subscriptions,
@@ -46,6 +67,7 @@ export function SubscriptionList({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -138,6 +160,18 @@ export function SubscriptionList({
                     <input type="checkbox" checked onChange={() => onSetEnded(s.id, false)} /> 종료
                   </label>
                 )}
+                <button
+                  type="button"
+                  className="deeplink"
+                  onClick={() => {
+                    copyText(formatContactText(s)).then(() => {
+                      setCopiedId(s.id);
+                      setTimeout(() => setCopiedId((cur) => (cur === s.id ? null : cur)), 1500);
+                    });
+                  }}
+                >
+                  {copiedId === s.id ? '복사됨 ✓' : '정보 복사'}
+                </button>
                 <button
                   type="button"
                   className="deeplink"
