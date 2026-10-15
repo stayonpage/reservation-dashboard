@@ -36,7 +36,12 @@ export async function setSubscriptionEnded(id: string, ended: boolean): Result {
 
 export async function updateSubscription(
   id: string,
-  patch: { start_month?: string; end_month?: string; notes?: string | null },
+  patch: {
+    start_month?: string;
+    end_month?: string;
+    notes?: string | null;
+    stay_discount_used?: boolean;
+  },
 ): Result {
   if (patch.start_month !== undefined && !MONTH_RE.test(patch.start_month)) {
     return { error: '시작달 형식이 올바르지 않습니다.' };

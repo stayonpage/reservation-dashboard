@@ -525,7 +525,12 @@ export function DashboardRealtime({
     );
   const handleUpdateSubscription = (
     id: string,
-    patch: { start_month?: string; end_month?: string; notes?: string | null },
+    patch: {
+      start_month?: string;
+      end_month?: string;
+      notes?: string | null;
+      stay_discount_used?: boolean;
+    },
   ) =>
     runSubscription(
       () => patchSubscription(id, patch),

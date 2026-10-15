@@ -228,7 +228,7 @@ export async function getSubscriptions(supabase: SupabaseClient): Promise<Subscr
   const { data, error } = await supabase
     .from('subscriptions')
     .select(
-      'id,name,phone,address,address_detail,plan_months,amount,status,start_month,end_month,applied_at,confirmed_at,ended_at,notes,created_at',
+      'id,name,phone,address,address_detail,plan_months,amount,status,start_month,end_month,applied_at,confirmed_at,ended_at,notes,stay_discount_used,created_at',
     )
     .order('applied_at', { ascending: false });
   if (error) {
