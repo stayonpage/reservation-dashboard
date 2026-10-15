@@ -3,6 +3,8 @@ import { simpleParser } from 'mailparser';
 import { handleIncoming } from '../ingest';
 import { parseStayfolioEmailWithRealId } from '../parsers/stayfolio-email-enrich';
 import { parseImwebEmail } from '../parsers/imweb-email';
+import { isSubscriptionSubject } from '../parsers/subscription-email';
+import { handleSubscriptionIncoming } from '../ingest-subscription';
 import { extractPlainText } from './extract-text';
 
 // 지메일(개인 계정)을 IMAP으로 폴링해 스테이폴리오 예약 알림을 수신한다.
@@ -167,12 +169,21 @@ export async function pollGmailImwebInbox(): Promise<PollResult> {
         const externalId = parsedMail.messageId ?? `gmail-uid-${uid}`;
         const text = extractPlainText(parsedMail);
 
-        const outcome = await handleIncoming({
-          source: 'imweb_email',
-          externalId,
-          raw: text,
-          parse: parseImwebEmail,
-        });
+        // 입력폼 "월간구독N개월 신청" 알림은 예약이 아니라 구독 — 제목으로 분기한다
+        // (예약 파서로 보내면 parse_failed 만 쌓인다). 그 외 모든 메일은 기존 경로 그대로.
+        const subject = parsedMail.subject ?? '';
+        const outcome = isSubscriptionSubject(subject)
+          ? await handleSubscriptionIncoming({
+              externalId,
+              raw: `제목: ${subject}\n${text}`,
+              appliedAt: parsedMail.date,
+            })
+          : await handleIncoming({
+              source: 'imweb_email',
+              externalId,
+              raw: text,
+              parse: parseImwebEmail,
+            });
 
         if (outcome.status === 'parsed') result.parsed++;
         else if (outcome.status === 'duplicate') result.duplicate++;
