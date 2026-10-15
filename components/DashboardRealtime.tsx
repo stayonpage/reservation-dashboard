@@ -7,12 +7,21 @@ import {
   getBlockTasks,
   getPendingReservationChanges,
   getTodayPageAssignedReservationIds,
+  getSubscriptions,
+  getSubscriptionShipments,
 } from '../lib/queries';
 import { attachResync } from '../lib/resync';
-import type { Reservation, BlockTask, ReservationChange } from '../lib/db-types';
+import type {
+  Reservation,
+  BlockTask,
+  ReservationChange,
+  Subscription,
+  SubscriptionShipment,
+} from '../lib/db-types';
 import { DepositQueue } from './DepositQueue';
 import { BlockWorklist } from './BlockWorklist';
 import { ReservationList } from './ReservationList';
+import { SubscriptionList } from './SubscriptionList';
 import { ReservationChangeQueue } from './ReservationChangeQueue';
 import { RoomCalendar } from './RoomCalendar';
 import { WeeklyOverview } from './WeeklyOverview';
@@ -34,6 +43,15 @@ import {
   confirmUncancelReview,
   assignRandomRoom,
 } from '../lib/actions';
+import {
+  confirmSubscription,
+  unconfirmSubscription,
+  setSubscriptionEnded,
+  updateSubscription,
+  saveShipmentMemo,
+  createManualSubscription,
+  deleteSubscription,
+} from '../lib/subscription-actions';
 import type { Channel, PaymentStatus, ReservationOption } from '../lib/types';
 
 // 서버(page.tsx)가 초기 데이터를 fetch해 내려주고, 이 컴포넌트는 realtime 구독으로
@@ -53,17 +71,23 @@ export function DashboardRealtime({
   initialBlockTasks,
   initialChanges,
   initialTodayPageAssignedIds,
+  initialSubscriptions,
+  initialSubscriptionShipments,
   todayISO,
 }: {
   initialReservations: Reservation[];
   initialBlockTasks: BlockTask[];
   initialChanges: ReservationChange[];
   initialTodayPageAssignedIds: string[];
+  initialSubscriptions: Subscription[];
+  initialSubscriptionShipments: SubscriptionShipment[];
   todayISO: string;
 }) {
   const [reservations, setReservations] = useState(initialReservations);
   const [blockTasks, setBlockTasks] = useState(initialBlockTasks);
   const [changes, setChanges] = useState(initialChanges);
+  const [subscriptions, setSubscriptions] = useState(initialSubscriptions);
+  const [shipments, setShipments] = useState(initialSubscriptionShipments);
   const [todayPageAssignedIds, setTodayPageAssignedIds] = useState(
     () => new Set(initialTodayPageAssignedIds),
   );
@@ -116,6 +140,30 @@ export function DashboardRealtime({
               setReservations((prev) =>
                 upsertById(prev, payload.new as Reservation),
               );
+            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'subscriptions' },
+          (payload) => {
+            if (payload.eventType === 'DELETE') {
+              const oldId = (payload.old as { id: string }).id;
+              setSubscriptions((prev) => prev.filter((s) => s.id !== oldId));
+            } else {
+              setSubscriptions((prev) => upsertById(prev, payload.new as Subscription));
+            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'subscription_shipments' },
+          (payload) => {
+            if (payload.eventType === 'DELETE') {
+              const oldId = (payload.old as { id: string }).id;
+              setShipments((prev) => prev.filter((s) => s.id !== oldId));
+            } else {
+              setShipments((prev) => upsertById(prev, payload.new as SubscriptionShipment));
             }
           },
         )
@@ -287,16 +335,20 @@ export function DashboardRealtime({
         getBlockTasks(sb),
         getPendingReservationChanges(sb),
         getTodayPageAssignedReservationIds(sb),
+        getSubscriptions(sb),
+        getSubscriptionShipments(sb),
       ]);
     run()
       .catch(
         () => new Promise((r) => setTimeout(r, 3000)).then(run),
       )
-      .then(([res, blk, chg, assignedIds]) => {
+      .then(([res, blk, chg, assignedIds, subs, ships]) => {
         setReservations(res);
         setBlockTasks(blk);
         setChanges(chg);
         setTodayPageAssignedIds(new Set(assignedIds));
+        setSubscriptions(subs);
+        setShipments(ships);
       })
       .catch((e) => console.error('[대시보드] 재조회 실패', e));
   };
@@ -429,6 +481,91 @@ export function DashboardRealtime({
     ),
   };
 
+  // 월간구독 뮤테이션: 낙관적 반영 → 서버 액션 → 성공/실패 모두 재조회로 authoritative 값에 맞춘다.
+  const runSubscription = (
+    apply: () => void,
+    action: () => Promise<{ error: string | null }>,
+    failMsg: string,
+  ) => {
+    apply();
+    startTransition(() => {
+      action().then((res) => {
+        syncAll();
+        if (res.error) {
+          console.error(failMsg, res.error);
+          if (typeof window !== 'undefined') window.alert(failMsg + '\n' + res.error);
+        }
+      });
+    });
+  };
+  const patchSubscription = (id: string, patch: Partial<Subscription>) =>
+    setSubscriptions((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+
+  const handleConfirmSubscription = (id: string) =>
+    runSubscription(
+      () => patchSubscription(id, { status: 'confirmed', confirmed_at: new Date().toISOString() }),
+      () => confirmSubscription(id),
+      '입금확인 처리에 실패했습니다.',
+    );
+  const handleUnconfirmSubscription = (id: string) =>
+    runSubscription(
+      () => patchSubscription(id, { status: 'pending', confirmed_at: null }),
+      () => unconfirmSubscription(id),
+      '입금확인 취소에 실패했습니다.',
+    );
+  const handleSetSubscriptionEnded = (id: string, ended: boolean) =>
+    runSubscription(
+      () =>
+        patchSubscription(id, {
+          status: ended ? 'ended' : 'confirmed',
+          ended_at: ended ? new Date().toISOString() : null,
+        }),
+      () => setSubscriptionEnded(id, ended),
+      '종료 처리에 실패했습니다.',
+    );
+  const handleUpdateSubscription = (
+    id: string,
+    patch: { start_month?: string; end_month?: string; notes?: string | null },
+  ) =>
+    runSubscription(
+      () => patchSubscription(id, patch),
+      () => updateSubscription(id, patch),
+      '구독 정보 저장에 실패했습니다.',
+    );
+  const handleSaveShipment = (subscriptionId: string, month: string, memo: string) =>
+    runSubscription(
+      () =>
+        setShipments((prev) => {
+          const i = prev.findIndex((x) => x.subscription_id === subscriptionId && x.month === month);
+          if (i === -1) {
+            return [
+              {
+                id: `tmp-${subscriptionId}-${month}`,
+                subscription_id: subscriptionId,
+                month,
+                memo,
+                updated_at: new Date().toISOString(),
+              },
+              ...prev,
+            ];
+          }
+          const copy = [...prev];
+          copy[i] = { ...copy[i], memo };
+          return copy;
+        }),
+      () => saveShipmentMemo(subscriptionId, month, memo),
+      '발송 메모 저장에 실패했습니다.',
+    );
+  const handleCreateSubscription = (input: Parameters<typeof createManualSubscription>[0]) =>
+    runSubscription(() => {}, () => createManualSubscription(input), '구독자 추가에 실패했습니다.');
+  const handleDeleteSubscription = (id: string) =>
+    runSubscription(
+      () => setSubscriptions((prev) => prev.filter((s) => s.id !== id)),
+      () => deleteSubscription(id),
+      '구독 삭제에 실패했습니다.',
+    );
+  const pendingSubscriptionCount = subscriptions.filter((s) => s.status === 'pending').length;
+
   return (
     <>
       <DoubleBookingAlert
@@ -460,6 +597,12 @@ export function DashboardRealtime({
         <a href="#list">
           전체 예약
           <span className="n-count zero">{reservations.length}</span>
+        </a>
+        <a href="#subs">
+          구독
+          <span className={`n-count ${pendingSubscriptionCount === 0 ? 'zero' : ''}`}>
+            {pendingSubscriptionCount}
+          </span>
         </a>
         <a href="#stats">통계</a>
       </nav>
@@ -496,7 +639,19 @@ export function DashboardRealtime({
         todayPageAssignedIds={todayPageAssignedIds}
         todayISO={todayISO}
       />
-      <Statistics id="stats" reservations={reservations} />
+      <SubscriptionList
+        id="subs"
+        subscriptions={subscriptions}
+        shipments={shipments}
+        onConfirm={handleConfirmSubscription}
+        onUnconfirm={handleUnconfirmSubscription}
+        onSetEnded={handleSetSubscriptionEnded}
+        onUpdate={handleUpdateSubscription}
+        onSaveShipment={handleSaveShipment}
+        onCreate={handleCreateSubscription}
+        onDelete={handleDeleteSubscription}
+      />
+      <Statistics id="stats" reservations={reservations} subscriptions={subscriptions} />
     </>
   );
 }

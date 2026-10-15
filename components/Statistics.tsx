@@ -1,10 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { Reservation } from '../lib/db-types';
+import type { Reservation, Subscription } from '../lib/db-types';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import { CHANNEL_COLOR } from './Badges';
 import { computeStats, monthRange, type DateRange } from '../lib/stats';
+import { computeSubscriptionStats } from '../lib/subscription-stats';
 import { formatWon, kstNow } from '../lib/format';
 
 // 기간(월 또는 커스텀) 통계 — 방별 점유율/매출, 옵션별, 채널별, 프로퍼티(스테이/게스트하우스)별
@@ -40,7 +41,15 @@ function BarRow({
   );
 }
 
-export function Statistics({ reservations, id }: { reservations: Reservation[]; id?: string }) {
+export function Statistics({
+  reservations,
+  subscriptions,
+  id,
+}: {
+  reservations: Reservation[];
+  subscriptions: Subscription[];
+  id?: string;
+}) {
   // "이번 달"은 한국시간 기준(서버 SSR이 UTC여도 동일하게) — kstNow는 getUTC* 게터로만 읽는다.
   const today = kstNow();
   const [mode, setMode] = useState<'month' | 'custom'>('month');
@@ -56,6 +65,10 @@ export function Statistics({ reservations, id }: { reservations: Reservation[]; 
     mode === 'month' ? monthRange(cursor.y, cursor.m) : { start: customStart, end: customEnd };
 
   const stats = useMemo(() => computeStats(reservations, range), [reservations, range]);
+  const subStats = useMemo(
+    () => computeSubscriptionStats(subscriptions, range),
+    [subscriptions, range],
+  );
 
   const maxRoomOccupancy = 100;
   const maxRoomRevenue = Math.max(1, ...stats.rooms.map((r) => r.revenue));
@@ -141,6 +154,17 @@ export function Statistics({ reservations, id }: { reservations: Reservation[]; 
           <div className="stat-card-label">합계(전체)</div>
           <div className="stat-card-value">{formatWon(stats.grandTotal)}</div>
           <div className="stat-card-sub">{stats.totalReservations}건</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-label">월간구독</div>
+          <div className="stat-card-value">{formatWon(subStats.revenue)}</div>
+          <div className="stat-card-sub">
+            입금 {subStats.newCount}건 · 활성 {subStats.activeCount}명
+          </div>
+        </div>
+        <div className="stat-card highlight">
+          <div className="stat-card-label">숙박+구독 합계</div>
+          <div className="stat-card-value">{formatWon(stats.grandTotal + subStats.revenue)}</div>
         </div>
         <div className="stat-card">
           <div className="stat-card-label">평균 예약금액</div>

@@ -219,7 +219,11 @@ export async function getPendingReservationChanges(
   }));
 }
 
-// 월간구독 — 배포 순서 슬립(0029 미적용)으로 테이블이 없을 때(42P01) 대시보드 전체가 500 나지 않도록 빈 배열 폴백.
+// 월간구독 — 배포 순서 슬립(0029 미적용)으로 테이블이 없을 때 대시보드 전체가 500 나지 않도록 빈 배열 폴백.
+// PostgREST 는 테이블 없음을 Postgres 원본 '42P01' 이 아니라 'PGRST205'(schema cache)로 돌려준다
+// (2026-10-15 빌드에서 확인) — 둘 다 막는다.
+const isMissingTable = (code?: string) => code === '42P01' || code === 'PGRST205';
+
 export async function getSubscriptions(supabase: SupabaseClient): Promise<Subscription[]> {
   const { data, error } = await supabase
     .from('subscriptions')
@@ -228,7 +232,7 @@ export async function getSubscriptions(supabase: SupabaseClient): Promise<Subscr
     )
     .order('applied_at', { ascending: false });
   if (error) {
-    if (error.code === '42P01') {
+    if (isMissingTable(error.code)) {
       console.warn('getSubscriptions: subscriptions 테이블 없음 — 빈 목록으로 폴백', error.message);
       return [];
     }
@@ -244,7 +248,7 @@ export async function getSubscriptionShipments(
     .from('subscription_shipments')
     .select('id,subscription_id,month,memo,updated_at');
   if (error) {
-    if (error.code === '42P01') {
+    if (isMissingTable(error.code)) {
       console.warn('getSubscriptionShipments: 테이블 없음 — 빈 목록으로 폴백', error.message);
       return [];
     }
