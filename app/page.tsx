@@ -17,6 +17,12 @@ import { signOut } from './login/actions';
 
 const CHANNELS: Channel[] = ['naver', 'stayfolio', 'imweb'];
 
+// 요청마다 최신 데이터로 렌더링. 이 페이지는 쿠키/헤더를 읽지 않는 service-role 클라이언트(99cde57,
+// PGRST303 수정)로 DB 를 읽는데, 그러면 Next.js 가 `/` 를 정적(○)으로 판단해 빌드 시점의 예약·구독
+// 데이터를 HTML 에 구워 넣는다 → 새로고침해도 옛 데이터가 보이고(서버 액션의 revalidatePath 가 돌 때만
+// 갱신), 폰·PC 화면이 어긋난다(2026-10 확인: 이 커밋 전 빌드는 ƒ, 이후는 ○). 동적 렌더링을 강제한다.
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardPage() {
   if (!isSupabaseConfigured()) {
     return (
