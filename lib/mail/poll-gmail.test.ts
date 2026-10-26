@@ -94,6 +94,40 @@ describe('pollGmailStayfolioInbox', () => {
     );
   });
 
+  it('★ 취소 제목("…취소하였습니다")이면 본문 앞에 취소 표시를 붙여 넘긴다(2026-10-11 김민주님 사례)', async () => {
+    mockClient.search.mockResolvedValue([502]);
+    mockClient.download.mockResolvedValue({ content: Buffer.from('raw') });
+    mockParsed.mockResolvedValue({
+      messageId: '<sf-cancel>',
+      subject: '스테이폴리오 홍길동(a@b.com)님이 확정 전 예약을 취소하였습니다. - 스테이온페이지(page26)',
+      text: '스테이온페이지(page26) 본문',
+    });
+    mockHandleIncoming.mockResolvedValue({ status: 'parsed', reservationId: 'r1' });
+
+    await pollGmailStayfolioInbox();
+
+    expect(mockHandleIncoming).toHaveBeenCalledWith(
+      expect.objectContaining({ externalId: '<sf-cancel>', raw: '[예약 취소] 스테이온페이지(page26) 본문' }),
+    );
+  });
+
+  it('★ 회귀: 일반 예약 제목이면 본문을 그대로 넘긴다', async () => {
+    mockClient.search.mockResolvedValue([503]);
+    mockClient.download.mockResolvedValue({ content: Buffer.from('raw') });
+    mockParsed.mockResolvedValue({
+      messageId: '<sf-book>',
+      subject: '스테이폴리오 홍길동(a@b.com)님의 예약내용입니다. - 스테이온페이지(page26)',
+      text: '스테이온페이지(page26) 본문',
+    });
+    mockHandleIncoming.mockResolvedValue({ status: 'parsed', reservationId: 'r1' });
+
+    await pollGmailStayfolioInbox();
+
+    expect(mockHandleIncoming).toHaveBeenCalledWith(
+      expect.objectContaining({ raw: '스테이온페이지(page26) 본문' }),
+    );
+  });
+
   it('DB 오류 시 읽음 처리 안 함(재시도 위해) — 개인 메일함이라도 예외 없이 동일 원칙', async () => {
     mockClient.search.mockResolvedValue([9]);
     mockClient.download.mockResolvedValue({ content: Buffer.from('raw') });

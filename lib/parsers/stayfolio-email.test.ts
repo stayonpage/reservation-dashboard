@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseStayfolioEmail } from './stayfolio-email';
+import { parseStayfolioEmail, withStayfolioSubject } from './stayfolio-email';
 
 // 실제 스테이폴리오 예약 알림 이메일 형식(2026-07 확보, Gmail IMAP 직접 조회)을 그대로 유지하되,
 // 개인정보(이름·전화번호·이메일)는 가상 값으로 치환한 픽스처.
@@ -82,5 +82,55 @@ describe('parseStayfolioEmail', () => {
     expect(parseStayfolioEmail(withReq)!.guest_request).toBe(
       '아기 침대 요청드립니다',
     );
+  });
+});
+
+// 2026-10-11 실사례: 김민주님이 26호 예약 → 확정 전 취소 → 452호 재예약. 취소 메일은 본문이 예약 메일과
+// 같은 형식(결제금액만 0원)이고 "취소"는 제목에만 있어서, 본문만 보는 파서가 취소로 못 알아봤다.
+describe('withStayfolioSubject — 제목의 취소 표시를 본문 앞에 붙인다', () => {
+  const BOOKING_SUBJECT =
+    '스테이폴리오 홍길동(test.guest@example.com)님의 예약내용입니다. - 스테이온페이지(page26 - 시가 내려앉는 순간) 2026년 7월 29일 ~ 2026년 7월 30일';
+  const CANCEL_SUBJECT =
+    '스테이폴리오 홍길동(test.guest@example.com)님이 확정 전 예약을 취소하였습니다. - 스테이온페이지(page26 - 시가 내려앉는 순간) 2026년 7월 29일 ~ 2026년 7월 30일';
+  const CANCEL_BODY = SAMPLE.replace('결제금액 434,000원', '결제금액 0원');
+
+  it('★ 취소 제목이면 취소로 파싱된다', () => {
+    const r = parseStayfolioEmail(withStayfolioSubject(CANCEL_SUBJECT, CANCEL_BODY))!;
+    expect(r.cancelled).toBe(true);
+    expect(r.payment_status).toBe('none');
+  });
+
+  it('★ 취소 메일의 예약 키는 원래 예약 메일과 같다(같은 예약을 취소로 갱신)', () => {
+    const booking = parseStayfolioEmail(withStayfolioSubject(BOOKING_SUBJECT, SAMPLE))!;
+    const cancel = parseStayfolioEmail(withStayfolioSubject(CANCEL_SUBJECT, CANCEL_BODY))!;
+    expect(cancel.channel_reservation_id).toBe(booking.channel_reservation_id);
+    expect(cancel.room_name).toBe(booking.room_name);
+    expect(cancel.guest_name).toBe('홍길동');
+  });
+
+  it('★ 회귀: 일반 예약 제목은 취소로 오인하지 않는다', () => {
+    const r = parseStayfolioEmail(withStayfolioSubject(BOOKING_SUBJECT, SAMPLE))!;
+    expect(r.cancelled).toBe(false);
+    expect(r.payment_status).toBe('paid');
+    expect(r.amount).toBe(434000);
+  });
+
+  it('제목이 없거나 비어 있으면 본문을 그대로 돌려준다', () => {
+    expect(withStayfolioSubject(undefined, SAMPLE)).toBe(SAMPLE);
+    expect(withStayfolioSubject('', SAMPLE)).toBe(SAMPLE);
+  });
+
+  it('"취소되었습니다" 표현도 취소로 본다', () => {
+    const r = parseStayfolioEmail(
+      withStayfolioSubject('스테이폴리오 홍길동님의 예약이 취소되었습니다. - 스테이온페이지(page26)', CANCEL_BODY),
+    )!;
+    expect(r.cancelled).toBe(true);
+  });
+
+  it('손님 이름에 "취소"가 들어 있어도 제목의 취소 문구 판정만 쓴다(예약 제목은 취소 아님)', () => {
+    const r = parseStayfolioEmail(
+      withStayfolioSubject('스테이폴리오 취소선(a@b.com)님의 예약내용입니다. - 스테이온페이지(page26)', SAMPLE),
+    )!;
+    expect(r.cancelled).toBe(false);
   });
 });

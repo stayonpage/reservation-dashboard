@@ -3,6 +3,7 @@ import { simpleParser } from 'mailparser';
 import { handleIncoming } from '../ingest';
 import { parseStayfolioEmailWithRealId } from '../parsers/stayfolio-email-enrich';
 import { parseImwebEmail } from '../parsers/imweb-email';
+import { withStayfolioSubject } from '../parsers/stayfolio-email';
 import { isSubscriptionSubject } from '../parsers/subscription-email';
 import { handleSubscriptionIncoming } from '../ingest-subscription';
 import { extractPlainText } from './extract-text';
@@ -80,7 +81,8 @@ export async function pollGmailStayfolioInbox(): Promise<PollResult> {
         });
         const parsedMail = await simpleParser(content);
         const externalId = parsedMail.messageId ?? `gmail-uid-${uid}`;
-        const text = extractPlainText(parsedMail);
+        // 취소 메일은 "취소"가 제목에만 있다 — 제목이 취소면 본문 앞에 표시를 붙여 파서가 알아보게 한다.
+        const text = withStayfolioSubject(parsedMail.subject, extractPlainText(parsedMail));
 
         const outcome = await handleIncoming({
           source: 'stayfolio_email',

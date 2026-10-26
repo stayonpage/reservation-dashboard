@@ -74,6 +74,18 @@ function classifyPaymentMethod(s: string): PaymentMethod {
   return 'unknown';
 }
 
+// 스테이폴리오 취소 메일은 본문이 예약 메일과 같은 형식(결제금액만 0원)이고 "취소"는 제목에만 있다
+// (제목 예: "…님이 확정 전 예약을 취소하였습니다. - 스테이온페이지(page26 …)"). 본문만 보면 취소를
+// 알아볼 수 없어서(2026-10-11 김민주님: 26호 예약→취소→452호 재예약, 26호가 확정으로 남아 중복예약
+// 으로 잡힘), 제목이 취소를 말하면 본문 맨 앞에 표시를 붙여 아래 파서의 취소 판정이 잡게 한다.
+// "…님의 예약내용입니다" 같은 일반 예약 제목은 건드리지 않는다.
+const CANCEL_SUBJECT_RE = /취소(하였|되었|했)습니다/;
+
+export function withStayfolioSubject(subject: string | undefined | null, text: string): string {
+  if (subject && CANCEL_SUBJECT_RE.test(subject)) return `[예약 취소] ${text}`;
+  return text;
+}
+
 export function parseStayfolioEmail(text: string): ParsedReservation | null {
   const f = extractLabeledFields(text, LABELS);
 
@@ -93,9 +105,10 @@ export function parseStayfolioEmail(text: string): ParsedReservation | null {
 
   const method = classifyPaymentMethod(f['결제방법'] ?? '');
 
-  // 운영자 확인(2026-07): 스테이폴리오는 "신청" 이메일만 발송한다 — 별도 확정/취소 이메일 없음.
-  // 신청 시점에 이미 결제(정산금액까지) 완료돼 있으므로, 이 이메일 하나로 바로 확정 처리한다.
-  // 남기는 안전장치: 혹시 모를 취소 문구 포함 시에만 취소로 분류(현재까지 실제 사례는 없음).
+  // 신청 시점에 이미 결제(정산금액까지) 완료돼 있으므로 예약 메일 하나로 바로 확정 처리한다.
+  // 취소는 별도 메일("…취소하였습니다", 본문 형식은 같고 결제 0원)로 오며, 제목 판정은
+  // withStayfolioSubject 가 본문 앞에 붙이는 표시로 여기서 잡는다(2026-10 확인 — 이전엔 취소 메일이
+  // 없다고 알고 있었음).
   const cancelled = /취소/.test(text.slice(0, 60));
 
   return {
