@@ -128,6 +128,10 @@ export default async function DashboardPage() {
             );
           })}
         </div>
+        <p className="sync-note">
+          📮 예약 메일 확인 시간: 매일 06:00~21:30, 30분마다 · 밤 22시~아침 6시는
+          쉽니다 (밤사이 들어온 예약은 아침 06:00에 반영)
+        </p>
       </div>
 
       <DashboardRealtime

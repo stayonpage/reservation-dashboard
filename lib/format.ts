@@ -73,7 +73,31 @@ export function timeAgo(iso: string, now: Date = new Date()): string {
 /** 실패모드2(무음 유실) 대응: 마지막 동기화가 이 시간을 넘으면 경고 표시. */
 export const STALE_SYNC_THRESHOLD_HOURS = 3;
 
+// 폴링 휴식 시간대(KST 22:00~06:00, 0031 마이그레이션). 이 구간은 경과 시간에서 뺀다 —
+// 안 그러면 밤마다 "동기화 확인 필요"가 오탐으로 뜬다.
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+const KST_OFFSET_MS = 9 * HOUR_MS;
+const NIGHT_START_HOUR = 22;
+const NIGHT_END_HOUR = 30; // 다음 날 06:00
+
+function nightOverlapMs(startMs: number, endMs: number): number {
+  if (endMs <= startMs) return 0;
+  let total = 0;
+  // 시작 전날 밤(전날 22시~오늘 06시)부터 끝 시각이 속한 날 밤까지 훑는다.
+  const firstDay = Math.floor((startMs + KST_OFFSET_MS) / DAY_MS) - 1;
+  const lastDay = Math.floor((endMs + KST_OFFSET_MS) / DAY_MS);
+  for (let d = firstDay; d <= lastDay; d++) {
+    const midnight = d * DAY_MS - KST_OFFSET_MS; // 그날 KST 00:00
+    const from = Math.max(startMs, midnight + NIGHT_START_HOUR * HOUR_MS);
+    const to = Math.min(endMs, midnight + NIGHT_END_HOUR * HOUR_MS);
+    if (to > from) total += to - from;
+  }
+  return total;
+}
+
 export function isStale(lastSyncIso: string, now: Date = new Date()): boolean {
-  const hrs = (now.getTime() - new Date(lastSyncIso).getTime()) / 3_600_000;
-  return hrs >= STALE_SYNC_THRESHOLD_HOURS;
+  const last = new Date(lastSyncIso).getTime();
+  const elapsed = now.getTime() - last - nightOverlapMs(last, now.getTime());
+  return elapsed / HOUR_MS >= STALE_SYNC_THRESHOLD_HOURS;
 }
