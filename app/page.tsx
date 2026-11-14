@@ -1,5 +1,6 @@
 import { isSupabaseConfigured } from '../lib/supabase/config';
 import { createAdminClient } from '../lib/supabase/admin';
+import { withTransientRetry } from '../lib/retry-transient';
 import {
   getReservations,
   getBlockTasks,
@@ -48,14 +49,15 @@ export default async function DashboardPage() {
   const supabase = createAdminClient();
   // 계측: 4개 쿼리 중 무엇이 왜 실패하는지 Vercel 로그에 남긴다(Hobby 로그 보존 ~1h,
   // digest 만으론 범인 특정 불가). 실패는 그대로 던져 app/error.tsx 가 받게 둔다.
+  // PGRST303(Supabase 시계 순간 어긋남, 2026-11-14 digest 2515174361)은 재시도로 넘긴다.
   const settled = await Promise.allSettled([
-    getReservations(supabase),
-    getBlockTasks(supabase),
-    getLastSyncByChannel(supabase),
-    getPendingReservationChanges(supabase),
-    getTodayPageAssignedReservationIds(supabase),
-    getSubscriptions(supabase),
-    getSubscriptionShipments(supabase),
+    withTransientRetry(() => getReservations(supabase)),
+    withTransientRetry(() => getBlockTasks(supabase)),
+    withTransientRetry(() => getLastSyncByChannel(supabase)),
+    withTransientRetry(() => getPendingReservationChanges(supabase)),
+    withTransientRetry(() => getTodayPageAssignedReservationIds(supabase)),
+    withTransientRetry(() => getSubscriptions(supabase)),
+    withTransientRetry(() => getSubscriptionShipments(supabase)),
   ]);
   const names = ['getReservations', 'getBlockTasks', 'getLastSyncByChannel', 'getPendingReservationChanges', 'getTodayPageAssignedReservationIds', 'getSubscriptions', 'getSubscriptionShipments'] as const;
   const failed = settled.flatMap((r, i) =>
