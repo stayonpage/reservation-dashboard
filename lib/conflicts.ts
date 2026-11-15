@@ -16,6 +16,22 @@ function rangesOverlap(a: Reservation, b: Reservation): boolean {
   return a.check_in < b.check_out && b.check_in < a.check_out;
 }
 
+/** 충돌 안에서 "같은 채널끼리 겹치는" 예약 id — 한 채널 안의 겹침은 손님이 날짜를
+ *  바꿨는데 대시보드가 모르는 경우가 많아 "날짜 변경" 선택지를 준다(교차 채널은 취소만). */
+export function sameChannelConflictIds(conflict: RoomConflict): Set<string> {
+  const ids = new Set<string>();
+  const list = conflict.reservations;
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      if (list[i].channel === list[j].channel && rangesOverlap(list[i], list[j])) {
+        ids.add(list[i].id);
+        ids.add(list[j].id);
+      }
+    }
+  }
+  return ids;
+}
+
 export function findRoomConflicts(reservations: Reservation[]): RoomConflict[] {
   const active = reservations.filter((r) => r.status !== 'cancelled');
 

@@ -79,6 +79,37 @@ export async function cancelReservation(
   return { error: null };
 }
 
+// 손님이 네이버에서 날짜를 바꿨을 때(스마트플레이스 앱 푸시로만 알려짐 — 변경 메일 없음)
+// 직원이 새 날짜를 접수 — 기존 변경 확인 큐 경로로 즉시 확정한다(0032_staff_change_dates.sql).
+export async function changeReservationDates(
+  reservationId: string,
+  newCheckIn: string,
+  newCheckOut: string,
+): Promise<{ error: string | null }> {
+  if (!newCheckIn || !newCheckOut || newCheckOut <= newCheckIn) {
+    return { error: '날짜가 올바르지 않습니다.' };
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('staff_change_dates', {
+    p_reservation_id: reservationId,
+    p_new_check_in: newCheckIn,
+    p_new_check_out: newCheckOut,
+  });
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  try {
+    const { data: row } = await supabase
+      .from('reservations')
+      .select('room_name,check_in,check_out,status')
+      .eq('id', reservationId)
+      .single();
+    if (row) await notifyIfReservationFillsTodayPage(supabase, row);
+  } catch (e) {
+    console.error('[today-page-alert]', reservationId, e instanceof Error ? e.message : String(e));
+  }
+  return { error: null };
+}
+
 // 시스템 도입 전 예약을 직원이 수동 입력 — 자동 감지된 예약과 동일하게 취급됨
 // (통계·달력·막기 할 일 전부 반영). 이번 백필 전용, 반복 사용 예정 없음.
 export async function createManualReservation(params: {

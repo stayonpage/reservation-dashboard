@@ -3,7 +3,8 @@
 import type { Reservation } from '../lib/db-types';
 import { CHANNEL_LABEL } from '../lib/db-types';
 import { formatDateRange, formatWon } from '../lib/format';
-import { findRoomConflicts } from '../lib/conflicts';
+import { findRoomConflicts, sameChannelConflictIds } from '../lib/conflicts';
+import { DateChangeForm } from './DateChangeForm';
 
 // 같은 방에 겹치는 예약이 2건 이상일 때만 뜨는 경고 — 평소엔 아예 렌더링 안 됨.
 // 대시보드 맨 위에 둬서 다른 무엇보다 먼저 보이게 한다(돈·손님 신뢰 직결 문제라 최우선).
@@ -11,9 +12,15 @@ import { findRoomConflicts } from '../lib/conflicts';
 export function DoubleBookingAlert({
   reservations,
   onCancelReservation,
+  onChangeDates,
 }: {
   reservations: Reservation[];
   onCancelReservation: (reservationId: string) => void;
+  onChangeDates: (
+    reservationId: string,
+    newCheckIn: string,
+    newCheckOut: string,
+  ) => Promise<{ error: string | null }>;
 }) {
   const conflicts = findRoomConflicts(reservations);
   if (conflicts.length === 0) return null;
@@ -33,7 +40,9 @@ export function DoubleBookingAlert({
       <div className="conflict-alert-title">
         중복 예약 감지 — {conflicts.length}건
       </div>
-      {conflicts.map((c) => (
+      {conflicts.map((c) => {
+        const changeable = sameChannelConflictIds(c);
+        return (
         <div key={c.roomCode} className="conflict-card">
           <div className="conflict-room">{c.roomLabel}</div>
           {c.reservations.map((r) => (
@@ -42,6 +51,9 @@ export function DoubleBookingAlert({
                 <strong>{r.guest_name ?? '이름 미상'}</strong> · {CHANNEL_LABEL[r.channel]} ·{' '}
                 {formatDateRange(r.check_in, r.check_out)} · {formatWon(r.amount)}
               </div>
+              {changeable.has(r.id) && (
+                <DateChangeForm reservation={r} onChangeDates={onChangeDates} />
+              )}
               <button
                 type="button"
                 className="conflict-cancel-btn"
@@ -52,7 +64,8 @@ export function DoubleBookingAlert({
             </div>
           ))}
         </div>
-      ))}
+        );
+      })}
     </section>
   );
 }

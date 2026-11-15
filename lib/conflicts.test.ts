@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findRoomConflicts } from './conflicts';
+import { findRoomConflicts, sameChannelConflictIds } from './conflicts';
 import type { Reservation } from './db-types';
 
 function makeReservation(overrides: Partial<Reservation>): Reservation {
@@ -71,5 +71,20 @@ describe('findRoomConflicts', () => {
 
   it('한 예약뿐이면 충돌 없음', () => {
     expect(findRoomConflicts([makeReservation({ id: 'a' })])).toHaveLength(0);
+  });
+});
+
+describe('sameChannelConflictIds', () => {
+  it('같은 채널끼리 겹치는 예약 id만 돌려준다(네이버끼리 → 날짜 변경 후보)', () => {
+    const a = makeReservation({ id: 'a', channel: 'naver' });
+    const b = makeReservation({ id: 'b', channel: 'naver' });
+    const [c] = findRoomConflicts([a, b]);
+    expect(sameChannelConflictIds(c)).toEqual(new Set(['a', 'b']));
+  });
+  it('채널이 다르면 비어 있다(교차 채널 이중예약은 취소만)', () => {
+    const a = makeReservation({ id: 'a', channel: 'naver' });
+    const b = makeReservation({ id: 'b', channel: 'imweb' });
+    const [c] = findRoomConflicts([a, b]);
+    expect(sameChannelConflictIds(c).size).toBe(0);
   });
 });

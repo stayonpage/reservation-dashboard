@@ -1202,3 +1202,47 @@ section {
 .sub-manual summary { cursor: pointer; font-size: 13px; }
 .sub-manual-grid { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .sub-manual-grid input, .sub-manual-grid select { min-width: 0; padding: 6px 8px; }
+
+/* 날짜 변경 접수(네이버 앱 푸시로만 오는 변경을 직원이 입력) */
+.date-change-btn {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink, #333);
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+}
+.date-change-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+}
+.date-change-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  gap: 2px;
+}
+.date-change-form input[type='date'] {
+  font-size: 13px;
+  padding: 4px 6px;
+}
+.date-change-submit,
+.date-change-cancel {
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border: none;
+}
+.date-change-submit { background: var(--st-confirmed, #2f7d4f); color: #fff; }
+.date-change-cancel { background: #e6e6e6; color: #333; }
+.date-change-error { width: 100%; color: #b3261e; font-size: 12px; }
