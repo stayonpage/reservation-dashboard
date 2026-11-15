@@ -13,6 +13,7 @@ import { formatWon, formatDateRange, timeAgo, formatOptions, formatDateShort } f
 import { displayRoomName, ROOMS, TODAY_PAGE_PRODUCT_NAME } from '../lib/rooms';
 import type { ReservationStatus } from '../lib/types';
 import { listReservations } from '../lib/reservation-list';
+import { DateChangeForm } from './DateChangeForm';
 
 // 3채널 통합 리스트 뷰. (캘린더 뷰는 v1 후속 — 지금은 날짜순 리스트로 통합 확인 니즈를 충족)
 // 탭을 바꿀 때마다 다시 3건으로 접힌다 — 이전 탭에서 펼쳐놨던 상태가 다른 카테고리에 남아있으면
@@ -34,6 +35,7 @@ export function ReservationList({
   pendingByKind,
   onAssignRoom,
   onCancelReservation,
+  onChangeDates,
   todayPageAssignedIds,
   todayISO,
   id,
@@ -43,6 +45,11 @@ export function ReservationList({
   pendingByKind: { change: Set<string>; cancel: Set<string>; uncancel: Set<string> };
   onAssignRoom: (reservationId: string, roomCode: string) => void;
   onCancelReservation: (reservationId: string) => void;
+  onChangeDates: (
+    reservationId: string,
+    newCheckIn: string,
+    newCheckOut: string,
+  ) => Promise<{ error: string | null }>;
   todayPageAssignedIds: Set<string>;
   todayISO: string; // 6개월 이전 숨김 기준일(서버에서 확정한 KST 오늘)
   id?: string;
@@ -224,6 +231,9 @@ export function ReservationList({
                 {pendingByKind.change.has(r.id) && <ChangeRequestBadge />}
                 {pendingByKind.cancel.has(r.id) && <CancelRequestBadge />}
                 {pendingByKind.uncancel.has(r.id) && <UncancelRequestBadge />}
+                {r.status !== 'cancelled' && (
+                  <DateChangeForm reservation={r} onChangeDates={onChangeDates} />
+                )}
                 {r.status !== 'cancelled' && (
                   <button
                     type="button"

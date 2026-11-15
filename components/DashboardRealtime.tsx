@@ -35,6 +35,7 @@ import {
   createManualBlock,
   cancelManualBlock,
   cancelReservation,
+  changeReservationDates,
   updateReservationNotes,
   createManualReservation,
   keepReservationChange,
@@ -431,6 +432,16 @@ export function DashboardRealtime({
     });
   };
 
+  const handleChangeDates = async (
+    reservationId: string,
+    newCheckIn: string,
+    newCheckOut: string,
+  ): Promise<{ error: string | null }> => {
+    const res = await changeReservationDates(reservationId, newCheckIn, newCheckOut);
+    if (res.error) console.error('날짜 변경 실패:', res.error);
+    return res;
+  };
+
   const handleUpdateNotes = (reservationId: string, notes: string) => {
     setReservations((prev) =>
       prev.map((r) => (r.id === reservationId ? { ...r, notes } : r)),
@@ -576,6 +587,7 @@ export function DashboardRealtime({
       <DoubleBookingAlert
         reservations={reservations}
         onCancelReservation={handleCancelReservation}
+        onChangeDates={handleChangeDates}
       />
       <TodayPageBlockAlert reservations={reservations} />
       <nav className="quick-nav">
@@ -641,6 +653,7 @@ export function DashboardRealtime({
         pendingByKind={pendingByKind}
         onAssignRoom={handleAssignRandomRoom}
         onCancelReservation={handleCancelReservation}
+        onChangeDates={handleChangeDates}
         todayPageAssignedIds={todayPageAssignedIds}
         todayISO={todayISO}
       />
