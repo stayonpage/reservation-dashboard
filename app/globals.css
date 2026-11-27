@@ -545,13 +545,14 @@ section {
 
 .cal-notes-row {
   display: flex;
+  flex-wrap: wrap; /* 비고·이전날짜·손님요청이 같이 있으면 각자 줄을 가져야 글자가 세로로 안 깨진다 */
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 4px 8px;
 }
 
 .cal-notes-preview {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
   font-size: 11.5px;
   color: var(--text-dim);
@@ -1180,7 +1181,14 @@ section {
   background: transparent; cursor: pointer; font-size: 13px;
 }
 .prev-dates, .cal-prev-dates { color: var(--st-awaiting); font-size: 11px; }
-.cal-guest-request { font-size: 11px; color: var(--st-new); }
+.cal-guest-request {
+  font-size: 11px;
+  color: var(--st-new);
+  flex: 1 1 100%;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
 
 /* 월간구독 */
 .sub-badge {
